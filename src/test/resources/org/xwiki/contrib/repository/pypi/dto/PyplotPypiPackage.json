@@ -1,0 +1,37 @@
+{
+  "info": {
+    "maintainer": "",
+    "docs_url": null,
+    "requires_python": null,
+    "maintainer_email": "",
+    "cheesecake_code_kwalitee_id": null,
+    "keywords": "",
+    "package_url": "http://pypi.python.org/pypi/pyplot",
+    "author": "Matplotlib Development Team",
+    "author_email": "matplotlib-devel@python.org",
+    "download_url": "",
+    "platform": "any",
+    "version": "1.5.0",
+    "cheesecake_documentation_id": null,
+    "_pypi_hidden": false,
+    "description": "This is a placeholder package.  To obtain matplotlib, see the matplotlib package.",
+    "release_url": "http://pypi.python.org/pypi/pyplot/1.5.0",
+    "downloads": {
+      "last_month": 0,
+      "last_week": 0,
+      "last_day": 0
+    },
+    "_pypi_ordering": 0,
+    "classifiers": [],
+    "name": "pyplot",
+    "bugtrack_url": "",
+    "license": "BSD",
+    "summary": "Python plotting package",
+    "home_page": "http://matplotlib.org/",
+    "cheesecake_installability_id": null
+  },
+  "releases": {
+    "1.5.0": []
+  },
+  "urls": []
+}
