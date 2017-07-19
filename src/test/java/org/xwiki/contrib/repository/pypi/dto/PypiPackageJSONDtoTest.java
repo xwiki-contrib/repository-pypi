@@ -2,6 +2,7 @@ package org.xwiki.contrib.repository.pypi.dto;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Optional;
 
 import org.apache.commons.io.IOUtils;
 import org.junit.Test;
@@ -9,8 +10,10 @@ import org.junit.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Created by Krzysztof on 17.07.2017.
@@ -27,11 +30,11 @@ public class PypiPackageJSONDtoTest
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         //no exception expected - all fields are mapped
 
-        PypiPackageUrlDto zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5");
-        assertNotNull(zipUrlDtoForVersion);
+        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5");
+        assertTrue(zipUrlDtoForVersion.isPresent());
 
-        PypiPackageUrlDto zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
-        assertNotNull(zipUrlDtoForNewestVersion);
+        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
+        assertTrue(zipUrlDtoForNewestVersion.isPresent());
 
     }
 
@@ -41,10 +44,10 @@ public class PypiPackageJSONDtoTest
         String filenameOfJson = "PyplotPypiPackage.json";
         String json = getJson(filenameOfJson);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
-        PypiPackageUrlDto zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5.0");
-        assertNull(zipUrlDtoForVersion);
-        PypiPackageUrlDto zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
-        assertNull(zipUrlDtoForNewestVersion);
+        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5.0");
+        assertFalse(zipUrlDtoForVersion.isPresent());
+        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
+        assertFalse(zipUrlDtoForNewestVersion.isPresent());
     }
 
     public String getJson(String filename) throws IOException

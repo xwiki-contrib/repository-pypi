@@ -21,6 +21,7 @@ package org.xwiki.contrib.repository.pypi.dto;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.xwiki.contrib.repository.pypi.exception.PypiApiException;
 
@@ -42,15 +43,15 @@ public class PypiPackageJSONDto
 
     /**
      * Gets Url metadata for the latest version of package
-     * @return
+     *
      * @throws PypiApiException - when there's no downloable version of this package
      */
-    public PypiPackageUrlDto getZipUrlDtoForNewestVersion() throws PypiApiException
+    public Optional<PypiPackageUrlDto> getZipUrlDtoForNewestVersion() throws PypiApiException
     {
         String version = info.getVersion();
         if (version == null) {
             if (releases.size() < 1) {
-                throw new PypiApiException("There are no download version of " + info.getName() + " package.");
+                return Optional.empty();
             }
             String firstChildLabel = releases.fieldNames().next();
             return getZipUrlDtoForVersion(firstChildLabel);
@@ -62,24 +63,22 @@ public class PypiPackageJSONDto
     /**
      * @param version - version of package to get it's url meta data
      */
-    public PypiPackageUrlDto getZipUrlDtoForVersion(String version)
+    public Optional<PypiPackageUrlDto> getZipUrlDtoForVersion(String version)
     {
         JsonNode versionUrlNode = releases.get(version);
         if (versionUrlNode == null || versionUrlNode.isMissingNode()) {
-            return null;
+            return Optional.empty();
         } else {
             ObjectMapper objectMapper = new ObjectMapper();
             try {
                 PypiPackageUrlDto[] pypiPackageUrlDtos =
                         objectMapper.treeToValue(versionUrlNode, PypiPackageUrlDto[].class);
-                return Arrays.stream(pypiPackageUrlDtos)
-                        .filter(
-                                pypiPackageUrlDto -> "sdist".equals(pypiPackageUrlDto.getPackagetype())
-                        ).findFirst()
-                        .orElseGet(() -> null);
+                return Arrays.stream(pypiPackageUrlDtos).filter(
+                        pypiPackageUrlDto -> "sdist".equals(pypiPackageUrlDto.getPackagetype())
+                ).findFirst();
             } catch (JsonProcessingException e) {
                 //should never happen
-                return null;
+                return Optional.empty();
             }
         }
     }

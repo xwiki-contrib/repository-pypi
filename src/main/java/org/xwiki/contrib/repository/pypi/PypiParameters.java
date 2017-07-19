@@ -28,4 +28,6 @@ public interface PypiParameters
     String API_URL = "http://pypi.python.org/pypi";
     String PACKAGE_INFO_JSON = "http://pypi.python.org/pypi/{package_name}/json";
     String PACKAGE_VERSION_INFO_JSON = "http://pypi.python.org/pypi/{package_name}/{version}/json";
+
+    String DEFAULT_GROUPID = "org.python";
 }

@@ -30,10 +30,12 @@ import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
 import org.xwiki.contrib.repository.pypi.dto.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.ExtensionDependency;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionLicenseManager;
+import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.internal.ExtensionFactory;
 import org.xwiki.extension.repository.AbstractExtensionRepository;
@@ -84,7 +86,14 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     @Override public Extension resolve(ExtensionId extensionId) throws ResolveException
     {
-        return null;
+        String packageName = PypiUtils.getPackageName(extensionId);
+        Optional<String> version = PypiUtils.getVersion(extensionId);
+        try {
+            PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, version);
+            return PypiExtension.constructFrom(pypiPackageData, this, licenseManager, httpClientFactory);
+        } catch (HttpException e) {
+            throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
+        }
     }
 
     @Override public Extension resolve(ExtensionDependency extensionDependency) throws ResolveException
@@ -97,13 +106,18 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         return null;
     }
 
-    protected Optional<PypiPackageJSONDto> getPypiPackageData(String packageName, String version)
+    protected PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
             throws HttpException, ResolveException
     {
-        HttpGet getMethod = new HttpGet(
-                PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}",
-                        packageName).replace("{version}", version)
-        );
+        HttpGet getMethod;
+        if (version.isPresent()) {
+            getMethod = new HttpGet(
+                    PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
+                            .replace("{version}", version.get())
+            );
+        } else {
+            getMethod = new HttpGet(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
+        }
         CloseableHttpClient httpClient = httpClientFactory.createClient(null, null);
         CloseableHttpResponse response;
         try {
@@ -121,13 +135,13 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             try {
                 PypiPackageJSONDto pypiPackageJSONDto =
                         objectMapper.readValue(response.getEntity().getContent(), PypiPackageJSONDto.class);
-                return Optional.of(pypiPackageJSONDto);
+                return pypiPackageJSONDto;
             } catch (IOException e) {
                 throw new HttpException(String.format("Failed to parse response body of request [%s]",
                         getMethod.getURI()), e);
             }
         } else if (statusCode == HttpStatus.SC_NOT_FOUND) {
-            return Optional.empty();
+            throw new ExtensionNotFoundException("Could not find package [" + packageName + "] descriptor");
         } else {
             throw new ResolveException(String.format("Invalid answer [%s] from the server when requesting [%s]",
                     response.getStatusLine().getStatusCode(), getMethod.getURI()));
