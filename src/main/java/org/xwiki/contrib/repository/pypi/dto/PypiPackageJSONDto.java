@@ -29,6 +29,7 @@ import java.util.stream.Collectors;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.exception.PypiApiException;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +39,7 @@ import com.google.common.collect.Sets;
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PypiPackageJSONDto
 {
     private PypiPackageInfoDto info;

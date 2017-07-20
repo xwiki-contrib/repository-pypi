@@ -21,15 +21,19 @@ package org.xwiki.contrib.repository.pypi.dto;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PypiPackageInfoDto
 {
     private String maintainer;
     private String docs_url;
     private String requires_python;
+    private List<String> requires_dist;
     private String maintainer_email;
     private String cheesecake_code_kwalitee_id;
     private String keywords;
@@ -301,5 +305,15 @@ public class PypiPackageInfoDto
     public void setCheesecake_installability_id(String cheesecake_installability_id)
     {
         this.cheesecake_installability_id = cheesecake_installability_id;
+    }
+
+    public List<String> getRequires_dist()
+    {
+        return requires_dist;
+    }
+
+    public void setRequires_dist(List<String> requires_dist)
+    {
+        this.requires_dist = requires_dist;
     }
 }

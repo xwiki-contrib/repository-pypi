@@ -19,10 +19,13 @@
  */
 package org.xwiki.contrib.repository.pypi.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PypiPackageUrlDto
 {
     private boolean has_sig;
