@@ -61,13 +61,15 @@ public class PypiExtension extends AbstractRemoteExtension
         String packageName = pypiPackageData.getInfo().getName();
         String version = pypiPackageData.getInfo().getVersion();
         ExtensionId extensionId = new ExtensionId(PypiParameters.DEFAULT_GROUPID + ":" + packageName, version);
-        Optional<PypiPackageUrlDto> zipUrlDtoForVersionOptional = pypiPackageData.getZipUrlDtoForVersion(version);
-        if (!zipUrlDtoForVersionOptional.isPresent()) {
-            throw new ResolveException("Extension [" + packageName + "] found in repository but 'sdist' distribution (a.k.a Zip) not found");
+        Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional =
+                pypiPackageData.getEggOrWhlFileUrlDtoForVersion(version);
+        if (!fileUrlDtoForVersionOptional.isPresent()) {
+            throw new ResolveException("Extension [" + packageName
+                    + "] found in repository but compatible python version distribution (Jython 2.7) not found");
         }
-        PypiPackageUrlDto zipUrlDtoForVersion = zipUrlDtoForVersionOptional.get();
+        PypiPackageUrlDto fileUrlDtoForVersion = fileUrlDtoForVersionOptional.get();
         PypiExtension pypiExtension =
-                new PypiExtension(pypiExtensionRepository, extensionId, zipUrlDtoForVersion.getPackagetype());
+                new PypiExtension(pypiExtensionRepository, extensionId, PypiParameters.PACKAGE_TYPE);
 
         //set metadata
         pypiExtension.setName(pypiPackageData.getInfo().getName());
@@ -80,8 +82,8 @@ public class PypiExtension extends AbstractRemoteExtension
 
         //setFile
         try {
-            URI uriToDownload = new URI(zipUrlDtoForVersion.getUrl());
-            long size = zipUrlDtoForVersion.getSize();
+            URI uriToDownload = new URI(fileUrlDtoForVersion.getUrl());
+            long size = fileUrlDtoForVersion.getSize();
             PypiExtensionFile pypiExtensionFile = new PypiExtensionFile(uriToDownload, size, httpClientFactory);
             pypiExtension.setFile(pypiExtensionFile);
         } catch (URISyntaxException e) {

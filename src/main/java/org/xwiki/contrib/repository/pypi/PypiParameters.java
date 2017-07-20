@@ -30,4 +30,9 @@ public interface PypiParameters
     String PACKAGE_VERSION_INFO_JSON = "http://pypi.python.org/pypi/{package_name}/{version}/json";
 
     String DEFAULT_GROUPID = "org.python";
+    String PACKAGE_TYPE = "jar";
+
+    String PACKAGE_TYPE_SDIST = "sdist";
+    String PACKAGE_TYPE_EGG = "bdist_egg";
+    String PACKAGE_TYPE_WHEEL = "bdist_wheel";
 }

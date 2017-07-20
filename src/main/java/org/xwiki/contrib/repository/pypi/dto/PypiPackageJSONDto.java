@@ -20,14 +20,19 @@
 package org.xwiki.contrib.repository.pypi.dto;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.exception.PypiApiException;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.Sets;
 
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
@@ -44,9 +49,9 @@ public class PypiPackageJSONDto
     /**
      * Gets Url metadata for the latest version of package
      *
-     * @throws PypiApiException - when there's no downloable version of this package
+     * @throws PypiApiException - when there's no downloadable version of this package
      */
-    public Optional<PypiPackageUrlDto> getZipUrlDtoForNewestVersion() throws PypiApiException
+    public Optional<PypiPackageUrlDto> getEggOrWhlUrlDtoForNewestVersion() throws PypiApiException
     {
         String version = info.getVersion();
         if (version == null) {
@@ -54,18 +59,40 @@ public class PypiPackageJSONDto
                 return Optional.empty();
             }
             String firstChildLabel = releases.fieldNames().next();
-            return getZipUrlDtoForVersion(firstChildLabel);
+            return getEggOrWhlFileUrlDtoForVersion(firstChildLabel);
         } else {
-            return getZipUrlDtoForVersion(version);
+            return getEggOrWhlFileUrlDtoForVersion(version);
         }
     }
 
     /**
-     * @param version - version of package to get it's url meta data
+     * @param releaseVersion - releaseVersion of package to be used to get url meta data
      */
-    public Optional<PypiPackageUrlDto> getZipUrlDtoForVersion(String version)
+    public Optional<PypiPackageUrlDto> getZipUrlDtoForVersion(String releaseVersion)
     {
-        JsonNode versionUrlNode = releases.get(version);
+        return getFileUrlDtoForVersion(releaseVersion, Collections.singleton(PypiParameters.PACKAGE_TYPE_SDIST));
+    }
+
+    /**
+     * @param releaseVersion - releaseVersion of package to be used to get url meta data
+     */
+    public Optional<PypiPackageUrlDto> getEggFileUrlDtoForVersion(String releaseVersion)
+    {
+        return getFileUrlDtoForVersion(releaseVersion, Collections.singleton(PypiParameters.PACKAGE_TYPE_EGG));
+    }
+
+    /**
+     * @param releaseVersion - releaseVersion of package to be used to get url meta data
+     */
+    public Optional<PypiPackageUrlDto> getEggOrWhlFileUrlDtoForVersion(String releaseVersion)
+    {
+        return getFileUrlDtoForVersion(releaseVersion,
+                Sets.newHashSet(PypiParameters.PACKAGE_TYPE_EGG, PypiParameters.PACKAGE_TYPE_WHEEL));
+    }
+
+    private Optional<PypiPackageUrlDto> getFileUrlDtoForVersion(String releaseVersion, Set packageTypes)
+    {
+        JsonNode versionUrlNode = releases.get(releaseVersion);
         if (versionUrlNode == null || versionUrlNode.isMissingNode()) {
             return Optional.empty();
         } else {
@@ -73,14 +100,60 @@ public class PypiPackageJSONDto
             try {
                 PypiPackageUrlDto[] pypiPackageUrlDtos =
                         objectMapper.treeToValue(versionUrlNode, PypiPackageUrlDto[].class);
-                return Arrays.stream(pypiPackageUrlDtos).filter(
-                        pypiPackageUrlDto -> "sdist".equals(pypiPackageUrlDto.getPackagetype())
-                ).findFirst();
+                // 1 get whl i egg
+                List<PypiPackageUrlDto> packagesOfGivenTypes =
+                        getPackagesOfGivenTypes(pypiPackageUrlDtos, packageTypes);
+                return tryToGetCompatiblePackage(packagesOfGivenTypes);
             } catch (JsonProcessingException e) {
                 //should never happen
                 return Optional.empty();
             }
         }
+    }
+
+    private List<PypiPackageUrlDto> getPackagesOfGivenTypes(PypiPackageUrlDto[] pypiPackageUrlDtos, Set packageTypes)
+    {
+        return Arrays.stream(pypiPackageUrlDtos).filter(
+                pypiPackageUrlDto -> packageTypes.contains(pypiPackageUrlDto.getPackagetype())
+        ).collect(Collectors.toList());
+    }
+
+    private Optional<PypiPackageUrlDto> tryToGetCompatiblePackage(List<PypiPackageUrlDto> packagesOfGivenTypes)
+    {
+        Optional<PypiPackageUrlDto> result;
+        result = tryToGetPython27PackageRegardingPythonVersionField(packagesOfGivenTypes);
+        if (!result.isPresent()) {
+            result = tryToGetPython27PackageRegadingPythonURLFileName(packagesOfGivenTypes);
+        }
+        if (!result.isPresent()) {
+            result = tryToGetPython2PackageRegadingPythonURLFileName(packagesOfGivenTypes);
+        }
+        return result;
+    }
+
+    private Optional<PypiPackageUrlDto> tryToGetPython27PackageRegardingPythonVersionField(
+            List<PypiPackageUrlDto> packagesOfGivenTypes)
+    {
+        return packagesOfGivenTypes.stream().filter(pypiPackageUrlDto -> {
+            String pythonVersion = pypiPackageUrlDto.getPython_version().toLowerCase();
+            return pythonVersion.contains("2.7") || pythonVersion.contains("any");
+        }).findFirst();
+    }
+
+    private Optional<PypiPackageUrlDto> tryToGetPython27PackageRegadingPythonURLFileName(
+            List<PypiPackageUrlDto> packagesOfGivenTypes)
+    {
+        return packagesOfGivenTypes.stream()
+                .filter(pypiPackageUrlDto -> pypiPackageUrlDto.getUrl().toLowerCase().contains("py27")
+                ).findFirst();
+    }
+
+    private Optional<PypiPackageUrlDto> tryToGetPython2PackageRegadingPythonURLFileName(
+            List<PypiPackageUrlDto> packagesOfGivenTypes)
+    {
+        return packagesOfGivenTypes.stream()
+                .filter(pypiPackageUrlDto -> pypiPackageUrlDto.getUrl().toLowerCase().contains("py2")
+                ).findFirst();
     }
 
     public PypiPackageInfoDto getInfo()

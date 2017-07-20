@@ -61,6 +61,7 @@ final public class PypiUtils
     /**
      * @param extensionId -
      * @return extracted version wrapped with Optional. If version is null or empty Optional is empty as well
+     * @throws ResolveException -
      */
     public static Optional<String> getVersion(ExtensionId extensionId)
     {

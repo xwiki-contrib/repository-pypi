@@ -54,6 +54,7 @@
         <xwiki.extension.name>Extension Repository Connector - Pypi</xwiki.extension.name>
         <xwiki.extension.category>repository</xwiki.extension.category>
         <xwiki.issueManagement.jira.id>PYPIREP</xwiki.issueManagement.jira.id>
+        <xwiki.jacoco.instructionRatio>0.1</xwiki.jacoco.instructionRatio>
         <xwiki.release.jira.skip>false</xwiki.release.jira.skip>
     </properties>
 

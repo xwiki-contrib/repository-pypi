@@ -23,20 +23,47 @@ public class PypiPackageJSONDtoTest
     private ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    public void deserializationTest() throws Exception
+    public void shouldFindPackageRegardingPythonVersion27() throws Exception
     {
-        String filenameOfJson = "PypiPackage.json";
+        String filenameOfJson = "NetworkXPypiPackage.json";
         String json = getJson(filenameOfJson);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         //no exception expected - all fields are mapped
 
-        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5");
+        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getEggOrWhlFileUrlDtoForVersion("1.5");
         assertTrue(zipUrlDtoForVersion.isPresent());
 
-        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
+        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getEggOrWhlUrlDtoForNewestVersion();
         assertTrue(zipUrlDtoForNewestVersion.isPresent());
-
     }
+
+    @Test
+    public void shouldNotFindAnyPackageWhenNoPythonVersion27() throws Exception
+    {
+        String filenameOfJson = "NumpyPypiPackage.json";
+        String json = getJson(filenameOfJson);
+        PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
+        //no exception expected - all fields are mapped
+
+        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getEggOrWhlFileUrlDtoForVersion("1.13.1");
+        assertFalse(zipUrlDtoForVersion.isPresent());
+    }
+
+    @Test
+    public void shouldFindPackageRegardingUrlFileNamePy2() throws Exception
+    {
+        String filenameOfJson = "DecoratorPypiPackage.json";
+        String json = getJson(filenameOfJson);
+        PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
+
+        Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getEggOrWhlFileUrlDtoForVersion("4.0.1");
+        assertTrue(zipUrlDtoForVersion.isPresent());
+
+        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getEggOrWhlUrlDtoForNewestVersion();
+        assertTrue(zipUrlDtoForNewestVersion.isPresent());
+    }
+
+
 
     @Test
     public void shouldWorkWhenNoDownloadUrlsArePresent() throws Exception
@@ -46,7 +73,7 @@ public class PypiPackageJSONDtoTest
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5.0");
         assertFalse(zipUrlDtoForVersion.isPresent());
-        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getZipUrlDtoForNewestVersion();
+        Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getEggOrWhlUrlDtoForNewestVersion();
         assertFalse(zipUrlDtoForNewestVersion.isPresent());
     }
 
