@@ -1,11 +1,9 @@
-package org.xwiki.contrib.repository.pypi.dto;
+package org.xwiki.contrib.repository.pypi.dto.pypiJsonApi;
 
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.Optional;
 
-import org.apache.commons.io.IOUtils;
 import org.junit.Test;
+import org.xwiki.contrib.repository.pypi.TestUtils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -26,7 +24,7 @@ public class PypiPackageJSONDtoTest
     public void shouldFindPackageRegardingPythonVersion27() throws Exception
     {
         String filenameOfJson = "NetworkXPypiPackage.json";
-        String json = getJson(filenameOfJson);
+        String json = TestUtils.getFileAsString(filenameOfJson, this);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         //no exception expected - all fields are mapped
 
@@ -41,7 +39,7 @@ public class PypiPackageJSONDtoTest
     public void shouldNotFindAnyPackageWhenNoPythonVersion27() throws Exception
     {
         String filenameOfJson = "NumpyPypiPackage.json";
-        String json = getJson(filenameOfJson);
+        String json = TestUtils.getFileAsString(filenameOfJson, this);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         //no exception expected - all fields are mapped
 
@@ -53,7 +51,7 @@ public class PypiPackageJSONDtoTest
     public void shouldFindPackageRegardingUrlFileNamePy2() throws Exception
     {
         String filenameOfJson = "DecoratorPypiPackage.json";
-        String json = getJson(filenameOfJson);
+        String json = TestUtils.getFileAsString(filenameOfJson, this);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
 
         Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getEggOrWhlFileUrlDtoForVersion("4.0.1");
@@ -69,23 +67,12 @@ public class PypiPackageJSONDtoTest
     public void shouldWorkWhenNoDownloadUrlsArePresent() throws Exception
     {
         String filenameOfJson = "PyplotPypiPackage.json";
-        String json = getJson(filenameOfJson);
+        String json = TestUtils.getFileAsString(filenameOfJson, this);
         PypiPackageJSONDto pypiPackageJSONDto = objectMapper.readValue(json, PypiPackageJSONDto.class);
         Optional<PypiPackageUrlDto> zipUrlDtoForVersion = pypiPackageJSONDto.getZipUrlDtoForVersion("1.5.0");
         assertFalse(zipUrlDtoForVersion.isPresent());
         Optional<PypiPackageUrlDto> zipUrlDtoForNewestVersion = pypiPackageJSONDto.getEggOrWhlUrlDtoForNewestVersion();
         assertFalse(zipUrlDtoForNewestVersion.isPresent());
     }
-
-    public String getJson(String filename) throws IOException
-    {
-        InputStream resourceAsStream = getClass().getResourceAsStream(filename);
-        try {
-            return IOUtils.toString(resourceAsStream);
-        } finally {
-            IOUtils.closeQuietly(resourceAsStream);
-        }
-    }
-
 
 }

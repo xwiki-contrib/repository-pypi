@@ -33,7 +33,7 @@ import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
-import org.xwiki.contrib.repository.pypi.dto.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.ExtensionDependency;

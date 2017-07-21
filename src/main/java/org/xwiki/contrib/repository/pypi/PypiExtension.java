@@ -25,8 +25,8 @@ import java.util.List;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
-import org.xwiki.contrib.repository.pypi.dto.PypiPackageJSONDto;
-import org.xwiki.contrib.repository.pypi.dto.PypiPackageUrlDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.AbstractRemoteExtension;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionLicense;
