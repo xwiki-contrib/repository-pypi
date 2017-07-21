@@ -30,13 +30,10 @@ import javax.inject.Singleton;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.component.phase.Initializable;
-import org.xwiki.extension.ExtensionLicenseManager;
-import org.xwiki.extension.internal.ExtensionFactory;
 import org.xwiki.extension.repository.DefaultExtensionRepositoryDescriptor;
 import org.xwiki.extension.repository.ExtensionRepository;
 import org.xwiki.extension.repository.ExtensionRepositoryDescriptor;
 import org.xwiki.extension.repository.ExtensionRepositoryManager;
-import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 import org.xwiki.observation.AbstractEventListener;
 import org.xwiki.observation.event.Event;
 
@@ -54,19 +51,13 @@ import org.xwiki.observation.event.Event;
 public class ExtensionPostInstallmentConfigListener extends AbstractEventListener implements Initializable
 {
     @Inject
-    private Logger logger;
+    private PypiExtensionRepository pypiRepository;
 
     @Inject
     private ExtensionRepositoryManager extensionRepositoryManager;
 
     @Inject
-    private ExtensionLicenseManager licenseManager;
-
-    @Inject
-    private HttpClientFactory httpClientFactory;
-
-    @Inject
-    private ExtensionFactory extensionFactory;
+    private Logger logger;
 
     /**
      *
@@ -92,8 +83,7 @@ public class ExtensionPostInstallmentConfigListener extends AbstractEventListene
 
     private ExtensionRepository createPypiRepository()
     {
-        return new PypiExtensionRepository(obtainPypiRepositoryDescriptor(), licenseManager, extensionFactory,
-                httpClientFactory, logger);
+        return pypiRepository.setUpRepository(obtainPypiRepositoryDescriptor());
     }
 
     private ExtensionRepositoryDescriptor obtainPypiRepositoryDescriptor()

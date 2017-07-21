@@ -22,6 +22,9 @@ package org.xwiki.contrib.repository.pypi;
 import java.io.IOException;
 import java.util.Optional;
 
+import javax.inject.Inject;
+import javax.inject.Singleton;
+
 import org.apache.http.HttpException;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -29,6 +32,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.slf4j.Logger;
+import org.xwiki.component.annotation.Component;
 import org.xwiki.contrib.repository.pypi.dto.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.extension.Extension;
@@ -50,38 +54,34 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
+@Component(roles = PypiExtensionRepository.class)
+@Singleton
 public class PypiExtensionRepository extends AbstractExtensionRepository
 {
     private static ObjectMapper objectMapper = new ObjectMapper();
 
-    private final ExtensionLicenseManager licenseManager;
+    @Inject
+    private ExtensionLicenseManager licenseManager;
 
-    private final ExtensionFactory extensionFactory;
+    @Inject
+    private ExtensionFactory extensionFactory;
 
-    private final HttpClientFactory httpClientFactory;
+    @Inject
+    private HttpClientFactory httpClientFactory;
 
-    private final HttpClientContext localContext;
+    @Inject
+    private Logger logger;
 
-    private final Logger logger;
+    private HttpClientContext localContext;
 
     /**
      * @param extensionRepositoryDescriptor -
-     * @param licenseManager -
-     * @param extensionFactory -
-     * @param httpClientFactory -
-     * @param logger -
      */
-    public PypiExtensionRepository(ExtensionRepositoryDescriptor extensionRepositoryDescriptor,
-            ExtensionLicenseManager licenseManager, ExtensionFactory extensionFactory,
-            HttpClientFactory httpClientFactory,
-            Logger logger)
+    public PypiExtensionRepository setUpRepository(ExtensionRepositoryDescriptor extensionRepositoryDescriptor)
     {
-        super(extensionRepositoryDescriptor);
-        this.licenseManager = licenseManager;
-        this.extensionFactory = extensionFactory;
-        this.httpClientFactory = httpClientFactory;
+        setDescriptor(extensionRepositoryDescriptor);
         this.localContext = HttpClientContext.create();
-        this.logger = logger;
+        return this;
     }
 
     @Override public Extension resolve(ExtensionId extensionId) throws ResolveException
