@@ -40,9 +40,9 @@ public class RequiredDistributionsTest
         RequiredDistributions requiredDistributions = performParsing(filename);
         assertEquals(47, requiredDistributions.getDependencies().size());
         assertEquals("aniso8601", requiredDistributions.getDependencies().get(0).getId().split(":")[1]);
-        assertEquals("[1.2.1]", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
+        assertEquals("1.2.1", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
         assertEquals("zxcvbn-python", requiredDistributions.getDependencies().get(46).getId().split(":")[1]);
-        assertEquals("[4.4.14]", requiredDistributions.getDependencies().get(46).getVersionConstraint().getValue());
+        assertEquals("4.4.14", requiredDistributions.getDependencies().get(46).getVersionConstraint().getValue());
     }
 
     @Test
@@ -52,9 +52,9 @@ public class RequiredDistributionsTest
         RequiredDistributions requiredDistributions = performParsing(filename);
         assertEquals(4, requiredDistributions.getDependencies().size());
         assertEquals("certifi", requiredDistributions.getDependencies().get(0).getId().split(":")[1]);
-        assertEquals("[2017.4.17,)", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
+        assertEquals("2017.4.17", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
         assertEquals("urllib3", requiredDistributions.getDependencies().get(3).getId().split(":")[1]);
-        assertEquals("[1.21.1,)", requiredDistributions.getDependencies().get(3).getVersionConstraint().getValue());
+        assertEquals("1.21.1", requiredDistributions.getDependencies().get(3).getVersionConstraint().getValue());
     }
 
     @Test
@@ -64,7 +64,7 @@ public class RequiredDistributionsTest
         RequiredDistributions requiredDistributions = performParsing(filename);
         assertEquals(1, requiredDistributions.getDependencies().size());
         assertEquals("functools32", requiredDistributions.getDependencies().get(0).getId().split(":")[1]);
-        assertEquals("(,2.18.1]", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
+        assertEquals("2.18.1", requiredDistributions.getDependencies().get(0).getVersionConstraint().getValue());
     }
 
     private RequiredDistributions performParsing(String filename) throws URISyntaxException, ResolveException

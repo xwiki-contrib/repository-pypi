@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
@@ -39,8 +40,11 @@ import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.extension.DefaultExtensionDependency;
 import org.xwiki.extension.ExtensionDependency;
 import org.xwiki.extension.ResolveException;
+import org.xwiki.extension.version.InvalidVersionRangeException;
 import org.xwiki.extension.version.VersionConstraint;
+import org.xwiki.extension.version.internal.DefaultVersion;
 import org.xwiki.extension.version.internal.DefaultVersionConstraint;
+import org.xwiki.extension.version.internal.DefaultVersionRangeCollection;
 
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
@@ -55,7 +59,6 @@ public class RequiredDistributions
     private static Pattern requiredDistExtra = Pattern.compile("^Requires-Dist: .*extra ==.*");
 
     private static Pattern requiredDistNoVersion = Pattern.compile("^(Requires-Dist: )([^\\s;]+)(.*)");
-
 
     private LinkedList<ExtensionDependency> dependencies;
 
@@ -121,24 +124,45 @@ public class RequiredDistributions
         try {
             PypiPackageJSONDto pypiPackageData =
                     pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty());
-            return new DefaultVersionConstraint("(," + pypiPackageData.getInfo().getVersion() + "]");
+            String version = pypiPackageData.getInfo().getVersion();
+            return new DefaultVersionConstraint(
+                    Collections.singleton(new DefaultVersionRangeCollection("(," + version + "]")),
+                    new DefaultVersion(version));
         } catch (HttpException e) {
             throw new ResolveException("Cannot obtain version of dependency for dependency package: " + packageName);
+        } catch (InvalidVersionRangeException e) {
+            //shouldNeverHappen
+            throw new ResolveException("Problem with version range spec.", e);
         }
     }
 
-    private static VersionConstraint getVersionOfDependency(String versionPart)
+    private static VersionConstraint getVersionOfDependency(String versionPart) throws ResolveException
     {
         String[] versionsIndications = versionPart.substring(1, versionPart.length() - 1).split(",");
+
         return Arrays.stream(versionsIndications).map(versionInd -> {
-            if (versionInd.contains(">=")) {
-                return new DefaultVersionConstraint("[" + versionInd.replace(">=", "") + ",)");
-            } else if (versionInd.contains("==")) {
-                return new DefaultVersionConstraint("[" + versionInd.replace("==", "") + "]");
-            } else if (versionInd.contains("<=")) {
-                return new DefaultVersionConstraint("(," + versionInd.replace("<=", "") + "]");
+            try {
+                if (versionInd.contains(">=")) {
+                    String version = versionInd.replace(">=", "");
+                    return new DefaultVersionConstraint(
+                            Collections.singleton(new DefaultVersionRangeCollection("[" + version + ",)")),
+                            new DefaultVersion(version));
+                } else if (versionInd.contains("==")) {
+                    String version = versionInd.replace("==", "");
+                    return new DefaultVersionConstraint(
+                            Collections.singleton(new DefaultVersionRangeCollection("(," + version + "]")),
+                            new DefaultVersion(version));
+                } else if (versionInd.contains("<=")) {
+                    String version = versionInd.replace("<=", "");
+                    return new DefaultVersionConstraint(
+                            Collections.singleton(new DefaultVersionRangeCollection("(," + version + "]")),
+                            new DefaultVersion(version));
+                }
+                return null;
+            } catch (InvalidVersionRangeException e) {
+                //shouldNeverHappen
+                return null;
             }
-            return null;
         }).filter(Objects::nonNull).findFirst().orElse(null);
     }
 }

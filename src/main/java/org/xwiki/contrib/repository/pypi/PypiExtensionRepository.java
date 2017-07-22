@@ -20,7 +20,11 @@
 package org.xwiki.contrib.repository.pypi;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -45,8 +49,10 @@ import org.xwiki.extension.internal.ExtensionFactory;
 import org.xwiki.extension.repository.AbstractExtensionRepository;
 import org.xwiki.extension.repository.ExtensionRepositoryDescriptor;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
+import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
 import org.xwiki.extension.version.Version;
+import org.xwiki.extension.version.internal.DefaultVersion;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -84,7 +90,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         return this;
     }
 
-    @Override public Extension resolve(ExtensionId extensionId) throws ResolveException
+    @Override
+    public Extension resolve(ExtensionId extensionId) throws ResolveException
     {
         String packageName = PypiUtils.getPackageName(extensionId);
         Optional<String> version = PypiUtils.getVersion(extensionId);
@@ -96,14 +103,42 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         }
     }
 
-    @Override public Extension resolve(ExtensionDependency extensionDependency) throws ResolveException
+    @Override
+    public Extension resolve(ExtensionDependency extensionDependency) throws ResolveException
     {
-        return null;
+        String id = extensionDependency.getId();
+        String version = extensionDependency.getVersionConstraint().getVersion().getValue();
+        return resolve(new ExtensionId(id, version));
     }
 
-    @Override public IterableResult<Version> resolveVersions(String s, int i, int i1) throws ResolveException
+    @Override
+    public IterableResult<Version> resolveVersions(String packageName, int offset, int nb) throws ResolveException
     {
-        return null;
+        try {
+            PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, Optional.empty());
+            List<Version> versions = pypiPackageData.getAvailableReleaseVersions().stream()
+                    .map(releaseVersion -> new DefaultVersion(releaseVersion)).collect(Collectors.toList());
+
+            if (versions.isEmpty()) {
+                throw new ExtensionNotFoundException("No versions available for id [" + packageName + "]");
+            }
+
+            if (nb == 0 || offset >= versions.size()) {
+                return new CollectionIterableResult<Version>(versions.size(), offset, Collections.<Version>emptyList());
+            }
+
+            int fromId = offset < 0 ? 0 : offset;
+            int toId = offset + nb > versions.size() || nb < 0 ? versions.size() : offset + nb;
+
+            List<Version> result = new ArrayList<Version>(toId - fromId);
+            for (int i = fromId; i < toId; ++i) {
+                result.add(versions.get(i));
+            }
+
+            return new CollectionIterableResult<Version>(versions.size(), offset, result);
+        } catch (HttpException e) {
+            throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
+        }
     }
 
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)

@@ -24,6 +24,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -46,6 +47,8 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
  */
 public class PypiExtension extends AbstractRemoteExtension
 {
+    private Pattern metadataFilename = Pattern.compile(".*.dist-info/METADATA$");
+
     private String distributionType;
 
     private PypiExtension(ExtensionRepository repository,
@@ -109,10 +112,9 @@ public class PypiExtension extends AbstractRemoteExtension
         if (PypiParameters.PACKAGE_TYPE_WHEEL.equals(getDistributionType())) {
             try {
                 zis = new ZipInputStream(getFile().openStream());
-                String expectedMetadataFilename = getExpectedMetadataFilename();
                 for (ZipEntry entry = zis.getNextEntry(); entry != null; entry = zis.getNextEntry()) {
                     String fileName = entry.getName();
-                    if (expectedMetadataFilename.equals(fileName)) {
+                    if (metadataFilename.matcher(fileName).matches()) {
                         RequiredDistributions.parseFile(zis, pypiExtensionRepository)
                                 .getDependencies().stream().forEach(dependency -> addDependency(dependency));
                         break;

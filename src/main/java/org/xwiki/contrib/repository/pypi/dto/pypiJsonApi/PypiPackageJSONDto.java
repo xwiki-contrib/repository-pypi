@@ -26,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.apache.commons.collections4.IteratorUtils;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.exception.PypiApiException;
 
@@ -65,6 +66,10 @@ public class PypiPackageJSONDto
         } else {
             return getEggOrWhlFileUrlDtoForVersion(version);
         }
+    }
+
+    public List<String> getAvailableReleaseVersions(){
+        return IteratorUtils.toList(releases.fieldNames());
     }
 
     /**
