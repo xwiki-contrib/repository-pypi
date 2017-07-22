@@ -106,7 +106,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         return null;
     }
 
-    protected PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
+    public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
             throws HttpException, ResolveException
     {
         HttpGet getMethod;

@@ -19,14 +19,19 @@
  */
 package org.xwiki.contrib.repository.pypi;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
+import org.xwiki.contrib.repository.pypi.dto.wheelMetadata.RequiredDistributions;
 import org.xwiki.extension.AbstractRemoteExtension;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionLicense;
@@ -41,6 +46,8 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
  */
 public class PypiExtension extends AbstractRemoteExtension
 {
+    private String distributionType;
+
     private PypiExtension(ExtensionRepository repository,
             ExtensionId id, String type)
     {
@@ -80,6 +87,7 @@ public class PypiExtension extends AbstractRemoteExtension
         pypiExtension.addRepository(pypiExtensionRepository.getDescriptor());
         pypiExtension.setRecommended(false);
 
+        pypiExtension.setDistributionType(fileUrlDtoForVersion.getPackagetype());
         //setFile
         try {
             URI uriToDownload = new URI(fileUrlDtoForVersion.getUrl());
@@ -90,7 +98,35 @@ public class PypiExtension extends AbstractRemoteExtension
             throw new ResolveException("Wrong download URL received from Rest call to repository", e);
         }
 
+        pypiExtension.addDependencies(pypiExtensionRepository);
+
         return pypiExtension;
+    }
+
+    private void addDependencies(PypiExtensionRepository pypiExtensionRepository) throws ResolveException
+    {
+        ZipInputStream zis = null;
+        if (PypiParameters.PACKAGE_TYPE_WHEEL.equals(getDistributionType())) {
+            try {
+                zis = new ZipInputStream(getFile().openStream());
+                String expectedMetadataFilename = getExpectedMetadataFilename();
+                for (ZipEntry entry = zis.getNextEntry(); entry != null; entry = zis.getNextEntry()) {
+                    String fileName = entry.getName();
+                    if (expectedMetadataFilename.equals(fileName)) {
+                        RequiredDistributions.parseFile(zis, pypiExtensionRepository)
+                                .getDependencies().stream().forEach(dependency -> addDependency(dependency));
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                throw new ResolveException(
+                        "Cannot open distribution package for obtaining dependencies. Package name: " + getName());
+            } finally {
+                IOUtils.closeQuietly(zis);
+            }
+        } else {
+            //not supported for other types of package
+        }
     }
 
     private void addLicences(String licenseName, ExtensionLicenseManager licenseManager)
@@ -104,5 +140,27 @@ public class PypiExtension extends AbstractRemoteExtension
                 addLicense(new ExtensionLicense(licenseName, content));
             }
         }
+    }
+
+    /**
+     *
+     * @return
+     */
+    public String getDistributionType()
+    {
+        return distributionType;
+    }
+
+    /**
+     * @param distributionType -
+     */
+    public void setDistributionType(String distributionType)
+    {
+        this.distributionType = distributionType;
+    }
+
+    public String getExpectedMetadataFilename()
+    {
+        return getName() + "-" + getId().getVersion() + ".dist-info/METADATA";
     }
 }
