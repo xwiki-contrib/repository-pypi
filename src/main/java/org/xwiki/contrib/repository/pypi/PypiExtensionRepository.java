@@ -19,26 +19,38 @@
  */
 package org.xwiki.contrib.repository.pypi;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import org.apache.http.HttpException;
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.lucene.queryparser.classic.ParseException;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
+import org.xwiki.component.manager.ComponentLifecycleException;
+import org.xwiki.component.phase.Disposable;
+import org.xwiki.component.phase.Initializable;
+import org.xwiki.component.phase.InitializationException;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.searching.PypiPackageListIndexUpdateTask;
+import org.xwiki.contrib.repository.pypi.searching.PypiPackageSearcher;
+import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
+import org.xwiki.environment.Environment;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.ExtensionDependency;
 import org.xwiki.extension.ExtensionId;
@@ -51,6 +63,8 @@ import org.xwiki.extension.repository.ExtensionRepositoryDescriptor;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
+import org.xwiki.extension.repository.search.SearchException;
+import org.xwiki.extension.repository.search.Searchable;
 import org.xwiki.extension.version.Version;
 import org.xwiki.extension.version.internal.DefaultVersion;
 
@@ -63,6 +77,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Component(roles = PypiExtensionRepository.class)
 @Singleton
 public class PypiExtensionRepository extends AbstractExtensionRepository
+        implements Searchable, Initializable, Disposable
 {
     private static ObjectMapper objectMapper = new ObjectMapper();
 
@@ -76,9 +91,16 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     private HttpClientFactory httpClientFactory;
 
     @Inject
+    private Environment environment;
+
+    @Inject
     private Logger logger;
 
     private HttpClientContext localContext;
+
+    private Timer timer;
+
+    private AtomicReference<File> pypiPackageListIndexDirectory = new AtomicReference<>();
 
     /**
      * @param extensionRepositoryDescriptor -
@@ -90,11 +112,34 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         return this;
     }
 
+    @Override public void initialize() throws InitializationException
+    {
+        timer = new Timer();
+        TimerTask pypiPackageListIndexUpdateTask =
+                new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
+                        logger);
+        pypiPackageListIndexUpdateTask.run();
+        long interval = 1000 * 60 * 60 * 12;
+        timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
+        // TODO: 24.07.2017 you may put this update interval in configuration
+    }
+
+    @Override public void dispose() throws ComponentLifecycleException
+    {
+        timer.cancel();
+        timer.purge();
+    }
+
     @Override
     public Extension resolve(ExtensionId extensionId) throws ResolveException
     {
         String packageName = PypiUtils.getPackageName(extensionId);
         Optional<String> version = PypiUtils.getVersion(extensionId);
+        return resolvePythonPackageExtension(packageName, version);
+    }
+
+    public Extension resolvePythonPackageExtension(String packageName, Optional<String> version) throws ResolveException
+    {
         try {
             PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, version);
             return PypiExtension.constructFrom(pypiPackageData, this, licenseManager, httpClientFactory);
@@ -144,42 +189,46 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
             throws HttpException, ResolveException
     {
-        HttpGet getMethod;
-        if (version.isPresent()) {
-            getMethod = new HttpGet(
-                    PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
-                            .replace("{version}", version.get())
-            );
-        } else {
-            getMethod = new HttpGet(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
-        }
-        CloseableHttpClient httpClient = httpClientFactory.createClient(null, null);
-        CloseableHttpResponse response;
+        URI uri = null;
         try {
-            if (this.localContext != null) {
-                response = httpClient.execute(getMethod, this.localContext);
+            if (version.isPresent()) {
+                uri = new URI(
+                        PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
+                                .replace("{version}", version.get()));
             } else {
-                response = httpClient.execute(getMethod);
+                uri = new URI(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
             }
-        } catch (Exception e) {
-            throw new HttpException(String.format("Failed to request [%s]", getMethod.getURI()), e);
+        } catch (URISyntaxException e) {
+            new ResolveException("Problem with created URI for resolving package info", e);
         }
 
-        int statusCode = response.getStatusLine().getStatusCode();
-        if (statusCode == HttpStatus.SC_OK) {
-            try {
-                PypiPackageJSONDto pypiPackageJSONDto =
-                        objectMapper.readValue(response.getEntity().getContent(), PypiPackageJSONDto.class);
-                return pypiPackageJSONDto;
-            } catch (IOException e) {
-                throw new HttpException(String.format("Failed to parse response body of request [%s]",
-                        getMethod.getURI()), e);
-            }
-        } else if (statusCode == HttpStatus.SC_NOT_FOUND) {
-            throw new ExtensionNotFoundException("Could not find package [" + packageName + "] descriptor");
-        } else {
-            throw new ResolveException(String.format("Invalid answer [%s] from the server when requesting [%s]",
-                    response.getStatusLine().getStatusCode(), getMethod.getURI()));
+        InputStream inputStream = PyPiHttpUtils.performGet(uri, httpClientFactory, localContext);
+
+        try {
+            return objectMapper.readValue(inputStream, PypiPackageJSONDto.class);
+        } catch (IOException e) {
+            throw new HttpException(String.format("Failed to parse response body of request [%s]",
+                    uri), e);
         }
+    }
+
+    @Override public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage)
+            throws SearchException
+    {
+        PypiPackageSearcher searcher = null;
+        try {
+            searcher = new PypiPackageSearcher(pypiPackageListIndexDirectory.get(), logger);
+        } catch (IOException e) {
+            logger.error("Could not open lucene index of pypi package list", e);
+            return new CollectionIterableResult(0, 0, Collections.emptyList());
+        }
+        try {
+            return searcher.search(searchQuery, offset, hitsPerPage);
+        } catch (ParseException e) {
+            logger.debug("Lucene query parser unable to parse query: " + searchQuery, e);
+        } catch (IOException e) {
+            logger.error("Lucene index searcher search exception", e);
+        }
+        return new CollectionIterableResult(0, 0, Collections.emptyList());
     }
 }

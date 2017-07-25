@@ -158,11 +158,11 @@ public class RequiredDistributions
                             Collections.singleton(new DefaultVersionRangeCollection("(," + version + "]")),
                             new DefaultVersion(version));
                 }
-                return null;
+               return null;
             } catch (InvalidVersionRangeException e) {
                 //shouldNeverHappen
                 return null;
             }
-        }).filter(Objects::nonNull).findFirst().orElse(null);
+        }).filter(Objects::nonNull).findFirst().orElse(null); // TODO: 25.07.2017 make it throw exception
     }
 }

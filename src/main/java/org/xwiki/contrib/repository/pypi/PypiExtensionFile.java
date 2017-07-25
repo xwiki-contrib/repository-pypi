@@ -21,13 +21,12 @@ package org.xwiki.contrib.repository.pypi;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.net.URI;
 
-import org.apache.http.HttpStatus;
-import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
+import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.http.impl.client.CloseableHttpClient;
+import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.extension.ExtensionFile;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
@@ -35,7 +34,7 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
-public class PypiExtensionFile implements ExtensionFile
+public class PypiExtensionFile implements ExtensionFile, Serializable
 {
     private final URI uriToDownload;
 
@@ -66,24 +65,10 @@ public class PypiExtensionFile implements ExtensionFile
 
     @Override public InputStream openStream() throws IOException
     {
-        HttpGet getMethod = new HttpGet(uriToDownload);
-        CloseableHttpClient httpClient = httpClientFactory.createClient(null, null);
-        CloseableHttpResponse response;
         try {
-            if (this.localContext != null) {
-                response = httpClient.execute(getMethod, this.localContext);
-            } else {
-                response = httpClient.execute(getMethod);
-            }
-        } catch (Exception e) {
-            throw new IOException(String.format("Failed to request [%s]", getMethod.getURI()), e);
-        }
-
-        int statusCode = response.getStatusLine().getStatusCode();
-        if (statusCode == HttpStatus.SC_OK) {
-            return response.getEntity().getContent();
-        } else {
-            throw new IOException("Failed to resolve package - wrong download URI: " + uriToDownload);
+            return PyPiHttpUtils.performGet(uriToDownload, httpClientFactory, localContext);
+        } catch (HttpException e) {
+            throw new IOException("Failed to resolve package - wrong download URI: " + uriToDownload, e);
         }
     }
 }

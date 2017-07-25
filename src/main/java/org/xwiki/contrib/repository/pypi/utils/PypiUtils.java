@@ -21,6 +21,7 @@ package org.xwiki.contrib.repository.pypi.utils;
 
 import java.util.Optional;
 
+import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionNotFoundException;
@@ -71,5 +72,10 @@ final public class PypiUtils
         } else {
             return Optional.of(version);
         }
+    }
+
+    public static boolean isSecondVersionNewer(String currentVersion, String newestVersion)
+    {
+        return (new DefaultArtifactVersion(currentVersion).compareTo(new DefaultArtifactVersion(newestVersion))) < 0 ;
     }
 }

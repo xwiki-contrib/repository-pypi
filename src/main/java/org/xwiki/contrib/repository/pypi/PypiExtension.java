@@ -20,6 +20,7 @@
 package org.xwiki.contrib.repository.pypi;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
@@ -45,7 +46,7 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
-public class PypiExtension extends AbstractRemoteExtension
+public class PypiExtension extends AbstractRemoteExtension implements Serializable
 {
     private Pattern metadataFilename = Pattern.compile(".*.dist-info/METADATA$");
 
@@ -100,8 +101,8 @@ public class PypiExtension extends AbstractRemoteExtension
         } catch (URISyntaxException e) {
             throw new ResolveException("Wrong download URL received from Rest call to repository", e);
         }
-
-        pypiExtension.addDependencies(pypiExtensionRepository);
+// TODO: 25.07.2017 revert this
+//        pypiExtension.addDependencies(pypiExtensionRepository);
 
         return pypiExtension;
     }
