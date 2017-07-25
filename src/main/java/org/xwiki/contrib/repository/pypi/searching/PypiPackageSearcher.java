@@ -43,7 +43,6 @@ import org.xwiki.contrib.repository.pypi.utils.ObjectSerializingUtils;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
-import org.xwiki.extension.version.Version;
 
 /**
  * Created by Krzysztof on 24.07.2017.
@@ -54,10 +53,13 @@ public class PypiPackageSearcher
 
     private final StandardAnalyzer analyzer;
 
+    private File indexDirectoryFile;
+
     private final Logger logger;
 
     public PypiPackageSearcher(File indexDirectoryFile, Logger logger) throws IOException
     {
+        this.indexDirectoryFile = indexDirectoryFile;
         this.logger = logger;
         Directory indexDirectory = FSDirectory.open(indexDirectoryFile.toPath());
         IndexReader reader = DirectoryReader.open(indexDirectory);
@@ -65,25 +67,39 @@ public class PypiPackageSearcher
         analyzer = new StandardAnalyzer();
     }
 
-    public Optional<String> searchOneAndGetItsVersion(String packageName) throws IOException, ParseException
+    public Optional<String> searchOneAndGetItsVersion(String packageName)
+    {
+        return searchOneAndGetField(packageName, LuceneParameters.VERSION);
+    }
+
+    public Optional<String> searchOneAndGetField(String packageName, String field)
     {
         Optional<Integer> id = searchOneAndGetItsDocumentId(packageName);
         if (id.isPresent()) {
-            return Optional.of(indexSearcher.doc(id.get()).get(LuceneParameters.VERSION));
-        } else {
-            return Optional.empty();
+            try {
+                return Optional.of(indexSearcher.doc(id.get()).get(field));
+            } catch (IOException e) {
+                logger.error("Could not get document of id: " + id.get());
+            }
         }
+        return Optional.empty();
     }
 
-    public Optional<Integer> searchOneAndGetItsDocumentId(String packageName) throws IOException, ParseException
+    public Optional<Integer> searchOneAndGetItsDocumentId(String packageName)
     {
-        Query q = new QueryParser(LuceneParameters.ID, analyzer).parse(packageName);
-        TopDocs hits = indexSearcher.search(q, 1);
-        if (hits.totalHits < 1) {
-            return Optional.empty();
-        } else {
-            return Optional.of(hits.scoreDocs[0].doc);
+        Query q = null;
+        try {
+            q = new QueryParser(LuceneParameters.ID, analyzer).parse(packageName);
+            TopDocs hits = indexSearcher.search(q, 1);
+            if (hits.totalHits == 1) {
+                return Optional.of(hits.scoreDocs[0].doc);
+            }
+        } catch (ParseException e) {
+            logger.debug("Could not parse query resolving package: " + packageName, e);
+        } catch (IOException e) {
+            logger.debug("Could not perform searching in lucene index for package: " + packageName, e);
         }
+        return Optional.empty();
     }
 
     public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage)
@@ -92,9 +108,7 @@ public class PypiPackageSearcher
         Query q = new QueryParser(LuceneParameters.PACKAGE_NAME, analyzer).parse(searchQuery);
         TopDocs hits = indexSearcher.search(q, LuceneParameters.MAX_NUMBER_OF_SEARCHING_HITS);
 
-
         int totalHits = hits.totalHits;
-
 
         if (hitsPerPage == 0 || offset >= totalHits) {
             return new CollectionIterableResult<Extension>(totalHits, offset, Collections.<Extension>emptyList());
@@ -119,5 +133,23 @@ public class PypiPackageSearcher
         int docId = scoreDoc.doc;
         String serializedExtension = indexSearcher.doc(docId).get(LuceneParameters.EXTENSION);
         return (PypiExtension) ObjectSerializingUtils.fromString(serializedExtension);
+    }
+
+    public File getIndexDirectoryFile()
+    {
+        return indexDirectoryFile;
+    }
+
+    public Optional<PypiExtension> searchOneAndExtension(String packageName)
+    {
+        Optional<String> serializedExtension = searchOneAndGetField(packageName, LuceneParameters.EXTENSION);
+        if (serializedExtension.isPresent()) {
+            try {
+                return Optional.of((PypiExtension) ObjectSerializingUtils.fromString(serializedExtension.get()));
+            } catch (IOException | ClassNotFoundException e) {
+                logger.error("Error whilst deserializing extension for package: " + packageName);
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -8,9 +8,12 @@ import org.junit.Test;
 import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageInfoDto;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.ResolveException;
 
 import static org.junit.Assert.*;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -25,11 +28,13 @@ public class RequiredDistributionsTest
     public void setUp() throws Exception
     {
         pypiExtensionRepository = mock(PypiExtensionRepository.class);
-        PypiPackageJSONDto functiontoolsPackageJSONDto = new PypiPackageJSONDto();
+        PypiPackageJSONDto functiontoolsPackageJSONDto = mock(PypiPackageJSONDto.class);
         PypiPackageInfoDto functiontoolsPackageInfoDto = new PypiPackageInfoDto();
         functiontoolsPackageInfoDto.setVersion("2.18.1");
-        functiontoolsPackageJSONDto.setInfo(functiontoolsPackageInfoDto);
-        when(pypiExtensionRepository.getPypiPackageData("functools32", Optional.empty()))
+        when(functiontoolsPackageJSONDto.getInfo()).thenReturn(functiontoolsPackageInfoDto);
+        when(functiontoolsPackageJSONDto.getEggOrWhlFileUrlDtoForVersion(any()))
+                .thenReturn(Optional.of(new PypiPackageUrlDto()));
+        when(pypiExtensionRepository.getPypiPackageData(anyString(), any()))
                 .thenReturn(functiontoolsPackageJSONDto);
     }
 
@@ -69,6 +74,7 @@ public class RequiredDistributionsTest
 
     private RequiredDistributions performParsing(String filename) throws URISyntaxException, ResolveException
     {
-        return RequiredDistributions.parseFile(getClass().getResourceAsStream(filename), pypiExtensionRepository);
+        return RequiredDistributions
+                .resolveDependenciesFromFile(getClass().getResourceAsStream(filename), pypiExtensionRepository);
     }
 }

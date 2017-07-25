@@ -101,8 +101,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         } catch (URISyntaxException e) {
             throw new ResolveException("Wrong download URL received from Rest call to repository", e);
         }
-// TODO: 25.07.2017 revert this
-//        pypiExtension.addDependencies(pypiExtensionRepository);
+        pypiExtension.addDependencies(pypiExtensionRepository);
 
         return pypiExtension;
     }
@@ -116,7 +115,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
                 for (ZipEntry entry = zis.getNextEntry(); entry != null; entry = zis.getNextEntry()) {
                     String fileName = entry.getName();
                     if (metadataFilename.matcher(fileName).matches()) {
-                        RequiredDistributions.parseFile(zis, pypiExtensionRepository)
+                        RequiredDistributions.resolveDependenciesFromFile(zis, pypiExtensionRepository)
                                 .getDependencies().stream().forEach(dependency -> addDependency(dependency));
                         break;
                     }

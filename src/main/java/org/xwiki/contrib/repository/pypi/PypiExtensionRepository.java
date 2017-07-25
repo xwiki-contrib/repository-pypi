@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
@@ -100,7 +99,10 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     private Timer timer;
 
-    private AtomicReference<File> pypiPackageListIndexDirectory = new AtomicReference<>();
+    private AtomicReference<File> pypiPackageListIndexDirectory =
+            new AtomicReference<>(new File("D:\\XWiki\\varia\\luceneIndex"));
+
+    private PypiPackageSearcher packageSearcher;
 
     /**
      * @param extensionRepositoryDescriptor -
@@ -115,10 +117,10 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     @Override public void initialize() throws InitializationException
     {
         timer = new Timer();
-        TimerTask pypiPackageListIndexUpdateTask =
+        PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask =
                 new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
                         logger);
-        pypiPackageListIndexUpdateTask.run();
+        pypiPackageListIndexUpdateTask.prepareIndex();
         long interval = 1000 * 60 * 60 * 12;
         timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
         // TODO: 24.07.2017 you may put this update interval in configuration
@@ -135,15 +137,26 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     {
         String packageName = PypiUtils.getPackageName(extensionId);
         Optional<String> version = PypiUtils.getVersion(extensionId);
-        return resolvePythonPackageExtension(packageName, version);
+        return getPythonPackageExtension(packageName, version);
     }
 
-    public Extension resolvePythonPackageExtension(String packageName, Optional<String> version) throws ResolveException
+    public PypiExtension getPythonPackageExtension(String packageName, Optional<String> version) throws ResolveException
+    {
+        Optional<String> packageVersion = getPypiPackageSearcher().searchOneAndGetItsVersion(packageName);
+        if(packageVersion.isPresent() && packageVersion.get().equals(version)) {
+            return getPypiPackageSearcher().searchOneAndExtension(packageName).get();
+        } else {
+            return resolvePythonPackageExtension(packageName, version);
+        }
+    }
+
+    private PypiExtension resolvePythonPackageExtension(String packageName, Optional<String> version)
+            throws ResolveException
     {
         try {
             PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, version);
             return PypiExtension.constructFrom(pypiPackageData, this, licenseManager, httpClientFactory);
-        } catch (HttpException e) {
+        } catch (HttpException | ResolveException e) {
             throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
         }
     }
@@ -216,12 +229,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             throws SearchException
     {
         PypiPackageSearcher searcher = null;
-        try {
-            searcher = new PypiPackageSearcher(pypiPackageListIndexDirectory.get(), logger);
-        } catch (IOException e) {
-            logger.error("Could not open lucene index of pypi package list", e);
-            return new CollectionIterableResult(0, 0, Collections.emptyList());
-        }
+        searcher = getPypiPackageSearcher();
         try {
             return searcher.search(searchQuery, offset, hitsPerPage);
         } catch (ParseException e) {
@@ -230,5 +238,23 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             logger.error("Lucene index searcher search exception", e);
         }
         return new CollectionIterableResult(0, 0, Collections.emptyList());
+    }
+
+    private PypiPackageSearcher getPypiPackageSearcher()
+    {
+        if (packageSearcher == null || hasPackageListIndexChanged()) {
+            try {
+                packageSearcher = new PypiPackageSearcher(pypiPackageListIndexDirectory.get(), logger);
+            } catch (IOException e) {
+                logger.error("Could not open lucene package list index from directory " + pypiPackageListIndexDirectory
+                        .get(), e);
+            }
+        }
+        return packageSearcher;
+    }
+
+    private boolean hasPackageListIndexChanged()
+    {
+        return !packageSearcher.getIndexDirectoryFile().equals(pypiPackageListIndexDirectory.get());
     }
 }

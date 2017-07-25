@@ -37,6 +37,7 @@ import org.apache.http.HttpException;
 import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.DefaultExtensionDependency;
 import org.xwiki.extension.ExtensionDependency;
 import org.xwiki.extension.ResolveException;
@@ -77,7 +78,8 @@ public class RequiredDistributions
         this.dependencies = dependencies;
     }
 
-    public static RequiredDistributions parseFile(InputStream is, PypiExtensionRepository pypiExtensionRepository)
+    public static RequiredDistributions resolveDependenciesFromFile(InputStream is,
+            PypiExtensionRepository pypiExtensionRepository)
             throws ResolveException
     {
 
@@ -87,28 +89,35 @@ public class RequiredDistributions
             List<String> lines = buffer.lines().collect(Collectors.toList());
             for (String line : lines) {
                 if (requiredDist.matcher(line).matches()) {
+                    String packageName;
+                    VersionConstraint versionConstraint;
+
                     if (requiredDistExtra.matcher(line).matches()) {
                         continue; // those dependencies are optional
                     }
                     if (requiredDistVersion.matcher(line).matches()) {
                         Matcher matcher = requiredDistVersion.matcher(line);
                         matcher.find();
-                        String packageName = matcher.group(2);
+                        packageName = matcher.group(2);
                         String versionPart = matcher.group(4);
-                        VersionConstraint versionConstraint = getVersionOfDependency(versionPart);
+                        versionConstraint = getVersionOfDependency(versionPart);
 
-                        dependencies.add(new DefaultExtensionDependency(
-                                PypiParameters.DEFAULT_GROUPID + ":" + packageName, versionConstraint));
                     } else if (requiredDistNoVersion.matcher(line).matches()) {
                         Matcher matcher = requiredDistNoVersion.matcher(line);
                         matcher.find();
-                        String packageName = matcher.group(2);
+                        packageName = matcher.group(2);
                         //find newest version of that package
-                        VersionConstraint versionConstraint =
+                        versionConstraint =
                                 getNewestVersionConstraint(packageName, pypiExtensionRepository);
+                    } else {
+                        continue;
+                    }
+                    if (isDependencyResolvable(packageName, versionConstraint, pypiExtensionRepository)) {
                         dependencies.add(new DefaultExtensionDependency(
                                 PypiParameters.DEFAULT_GROUPID + ":" + packageName, versionConstraint));
                     } else {
+                        throw new ResolveException(
+                                "Dependency: " + packageName + " nor resolvable, so the whole the whole package");
                     }
                 }
             }
@@ -116,6 +125,20 @@ public class RequiredDistributions
             throw new ResolveException("Could not open downloaded package to read dependencies");
         }
         return new RequiredDistributions(dependencies);
+    }
+
+    private static boolean isDependencyResolvable(String packageName, VersionConstraint versionConstraint,
+            PypiExtensionRepository pypiExtensionRepository)
+    {
+        try {
+            PypiPackageJSONDto pypiPackageData = pypiExtensionRepository
+                    .getPypiPackageData(packageName, Optional.of(versionConstraint.getVersion().getValue()));
+            Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
+                    pypiPackageData.getEggOrWhlFileUrlDtoForVersion(versionConstraint.getVersion().getValue());
+            return eggOrWhlFileUrlDtoForVersion.isPresent();
+        } catch (HttpException | ResolveException e) {
+            return false;
+        }
     }
 
     private static VersionConstraint getNewestVersionConstraint(String packageName,
@@ -158,7 +181,7 @@ public class RequiredDistributions
                             Collections.singleton(new DefaultVersionRangeCollection("(," + version + "]")),
                             new DefaultVersion(version));
                 }
-               return null;
+                return null;
             } catch (InvalidVersionRangeException e) {
                 //shouldNeverHappen
                 return null;
