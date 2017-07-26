@@ -117,7 +117,7 @@ public class RequiredDistributions
                                 PypiParameters.DEFAULT_GROUPID + ":" + packageName, versionConstraint));
                     } else {
                         throw new ResolveException(
-                                "Dependency: " + packageName + " nor resolvable, so the whole the whole package");
+                                "Dependency: " + packageName + " not resolvable");
                     }
                 }
             }

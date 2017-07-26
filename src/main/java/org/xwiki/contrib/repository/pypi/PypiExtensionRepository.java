@@ -27,6 +27,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Timer;
@@ -105,8 +106,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     private Timer timer;
 
-    private AtomicReference<File> pypiPackageListIndexDirectory =
-            new AtomicReference<>(new File("D:\\XWiki\\varia\\luceneIndexDependenciesFinal"));
+    private AtomicReference<File> pypiPackageListIndexDirectory = null;
 
     private PypiPackageSearcher packageSearcher;
 
@@ -127,7 +127,6 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask =
                 new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
                         logger);
-//        pypiPackageListIndexUpdateTask.prepareIndex();
         long interval = 1000 * 60 * 60 * 12;
         timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
         // TODO: 24.07.2017 you may put this update interval in configuration
@@ -137,15 +136,17 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     {
         try {
             URL inputUrl = getClass().getResource("/luceneIndexOfValidPackages/index.zip");
-            File zipDir = environment.getTemporaryDirectory();
-            zipDir = new File(zipDir.getAbsolutePath() + File.separator + "index.zip");
-            zipDir.createNewFile();
-            FileUtils.copyURLToFile(inputUrl, zipDir);
+            File zipFile = environment.getTemporaryDirectory();
+            zipFile = new File(zipFile.getAbsolutePath() + File.separator + "index.zip");
+            zipFile.createNewFile();
+            FileUtils.copyURLToFile(inputUrl, zipFile);
 
             //unzip
             File indexDir = environment.getTemporaryDirectory();
 
-            ZipUtils.unpack(zipDir, indexDir);
+            ZipUtils.unpack(zipFile, indexDir);
+            FileUtils.forceDelete(zipFile);
+            pypiPackageListIndexDirectory = new AtomicReference<>(indexDir);
         } catch (Exception e) {
             throw new InitializationException("Could not copy lucene index to local directory", e);
         }
@@ -248,16 +249,31 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     @Override public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage)
             throws SearchException
     {
-        PypiPackageSearcher searcher = null;
-        searcher = getPypiPackageSearcher();
+        PypiPackageSearcher searcher = getPypiPackageSearcher();
         try {
-            return searcher.search(searchQuery, offset, hitsPerPage);
+            IterableResult<String> packageNames = searcher.search(searchQuery, offset, hitsPerPage);
+            return toExtensions(packageNames);
         } catch (ParseException e) {
             logger.debug("Lucene query parser unable to parse query: " + searchQuery, e);
         } catch (IOException e) {
             logger.error("Lucene index searcher search exception", e);
         }
         return new CollectionIterableResult(0, 0, Collections.emptyList());
+    }
+
+    private IterableResult<Extension> toExtensions(IterableResult<String> packageNames)
+    {
+        LinkedList<Extension> extensions = new LinkedList<>();
+        packageNames.iterator().forEachRemaining(packageName -> {
+            try {
+                PypiExtension pythonPackageExtension = getPythonPackageExtension(packageName, Optional.empty());
+                extensions.add(pythonPackageExtension);
+            } catch (ResolveException e) {
+                logger.debug("Could nor resolve extension that is present in lucene index: " + packageName, e);
+            }
+        } );
+
+        return new CollectionIterableResult(packageNames.getTotalHits(), packageNames.getTotalHits(), extensions);
     }
 
     private PypiPackageSearcher getPypiPackageSearcher()

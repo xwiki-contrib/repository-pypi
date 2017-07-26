@@ -188,33 +188,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
 
     private void addAllValidPackagesToIndex(IndexWriter indexWriter, List<String> packageNames)
     {
-//        for (String packageName : packageNames) {
-//            try {
-//                Document newDocument = createNewDocument(packageName);
-//                indexWriter.addDocument(newDocument);
-//            } catch (ResolveException | HttpException e) {
-//                logger.debug("Could not resolve " + packageName + " package", e);
-//            } catch (IOException e) {
-//                logger.debug("IO problems whilst serializing " + packageName + " package extension", e);
-//            }
-//        }
-
-//        Second version
-//        List<Document> documents = packageNames.parallelStream().map(packageName -> {
-//            try {
-//                return createNewDocument(packageName);
-//            } catch (ResolveException | HttpException e) {
-//                logger.debug("Could not resolve " + packageName + " package", e);
-//            } catch (IOException e) {
-//                logger.debug("IO problems whilst serializing " + packageName + " package extension", e);
-//            }
-//            return null;
-//        }).filter(Objects::nonNull).collect(Collectors.toList());
-//        try {
-//            indexWriter.addDocuments(documents);
-//        } catch (IOException e) {
-//            logger.debug("IO problems whilst adding lucene documents", e);
-//        }
         packageNames.parallelStream().forEach(packageName -> {
 
             try {
@@ -235,7 +208,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
         document.add(new StringField(LuceneParameters.ID, packageName, Field.Store.YES));
         document.add(new StoredField(LuceneParameters.VERSION, version));
-        document.add(new StoredField(LuceneParameters.EXTENSION, ObjectSerializingUtils.toString(pypiExtension)));
         return document;
     }
 
@@ -270,54 +242,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             //should never happen
         }
         return Optional.empty();
-    }
-
-    public void prepareIndex()
-    {
-        LinkedList<String> validPackages = new LinkedList<>();
-        try {
-            Optional<InputStream> htmlPageInputStream = getHtmlPageInputStream();
-            List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
-            File oldIndex = this.pypiPackageListIndexDirectory.get();
-            File indexDir = environment.getTemporaryDirectory();
-            Directory indexDirectory = FSDirectory.open(indexDir.toPath());
-            IndexWriter indexWriter = new IndexWriter(indexDirectory, new IndexWriterConfig(new StandardAnalyzer()));
-
-            PackagesInJython packagesIncludedInJython = PackagesInJython.getPackagesIncludedInJython();
-            PypiPackageSearcher pypiPackageSearcher = new PypiPackageSearcher(oldIndex, logger);
-            packageNames.parallelStream().forEach(packageName -> {
-                if (!packagesIncludedInJython.contains(packageName)) {
-                    Optional<Document> document = pypiPackageSearcher.searchOneAndGetItsDocument(packageName);
-                    if (document.isPresent()) {
-                        try {
-                            indexWriter.addDocument(document.get());
-                            validPackages.add(packageName);
-                        } catch (Exception e) {
-                            logger.info("[" + packageName + "] removed due to unresolvable dependencies");
-                        }
-                    }
-                }else {
-                    logger.info("[" + packageName + "] removed due to unresolvable dependencies");
-                }
-            });
-
-            indexWriter.commit();
-            indexWriter.close();
-        } catch (ParserConfigurationException e) {
-            e.printStackTrace();
-        } catch (SAXException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        File fileTowrite = new File("D:\\XWiki\\varia\\validPackages.txt");
-        try {
-            PrintWriter out = new PrintWriter(fileTowrite);
-            validPackages.stream().forEach(s -> out.println(s));
-            out.close();
-        } catch (FileNotFoundException e) {
-        }
     }
 
     class PypiPackageListSAXHandler extends DefaultHandler

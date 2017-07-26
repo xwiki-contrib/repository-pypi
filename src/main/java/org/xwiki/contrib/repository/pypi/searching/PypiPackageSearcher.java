@@ -22,18 +22,24 @@ package org.xwiki.contrib.repository.pypi.searching;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.ParseException;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.RegexpQuery;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
@@ -44,6 +50,8 @@ import org.xwiki.contrib.repository.pypi.utils.ObjectSerializingUtils;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
+
+import jdk.nashorn.internal.runtime.regexp.joni.Regex;
 
 /**
  * Created by Krzysztof on 24.07.2017.
@@ -71,7 +79,7 @@ public class PypiPackageSearcher
     public Optional<Document> searchOneAndGetItsDocument(String packageName)
     {
         Optional<Integer> documentId = searchOneAndGetItsDocumentId(packageName);
-        if(documentId.isPresent()){
+        if (documentId.isPresent()) {
             try {
                 return Optional.of(indexSearcher.doc(documentId.get()));
             } catch (IOException e) {
@@ -116,54 +124,40 @@ public class PypiPackageSearcher
         return Optional.empty();
     }
 
-    public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage)
+    public IterableResult<String> search(String searchQuery, int offset, int hitsPerPage)
             throws ParseException, IOException
     {
-        Query q = new QueryParser(LuceneParameters.PACKAGE_NAME, analyzer).parse(searchQuery);
+        Query q = new RegexpQuery(new Term(LuceneParameters.PACKAGE_NAME, ".*" + searchQuery + ".*"));
         TopDocs hits = indexSearcher.search(q, LuceneParameters.MAX_NUMBER_OF_SEARCHING_HITS);
 
-        int totalHits = hits.totalHits;
+        List<String> packageNames = Arrays.stream(hits.scoreDocs).map(scoreDoc -> {
+            try {
+                return obtainPackageName(scoreDoc.doc);
+            } catch (IOException e) {
+            }
+            return null;
+        }).filter(Objects::nonNull).distinct().collect(Collectors.toList());
+
+        int totalHits = packageNames.size();
 
         if (hitsPerPage == 0 || offset >= totalHits) {
-            return new CollectionIterableResult<Extension>(totalHits, offset, Collections.<Extension>emptyList());
+            return new CollectionIterableResult<String>(totalHits, offset, Collections.<String>emptyList());
         }
 
         int fromIndex = offset < 0 ? 0 : offset;
         int toId = offset + hitsPerPage > totalHits || hitsPerPage < 0 ? totalHits : offset + hitsPerPage;
 
-        List<Extension> result = new ArrayList<Extension>(toId - fromIndex);
-        for (int i = fromIndex; i < toId; ++i) {
-            try {
-                result.add(deserializeExtension(hits.scoreDocs[i]));
-            } catch (ClassNotFoundException e) {
-                logger.error("Problem whilst deserializing pypi extension object", e);
-            }
-        }
-        return new CollectionIterableResult<Extension>(totalHits, offset, result);
+        List<String> result = packageNames.subList(fromIndex, toId);
+        return new CollectionIterableResult<String>(totalHits, offset, result);
     }
 
-    private PypiExtension deserializeExtension(ScoreDoc scoreDoc) throws IOException, ClassNotFoundException
+    private String obtainPackageName(int docId) throws IOException
     {
-        int docId = scoreDoc.doc;
-        String serializedExtension = indexSearcher.doc(docId).get(LuceneParameters.EXTENSION);
-        return (PypiExtension) ObjectSerializingUtils.fromString(serializedExtension);
+        return indexSearcher.doc(docId).get(LuceneParameters.PACKAGE_NAME);
     }
 
     public File getIndexDirectoryFile()
     {
         return indexDirectoryFile;
-    }
-
-    public Optional<PypiExtension> searchOneAndExtension(String packageName)
-    {
-        Optional<String> serializedExtension = searchOneAndGetField(packageName, LuceneParameters.EXTENSION);
-        if (serializedExtension.isPresent()) {
-            try {
-                return Optional.of((PypiExtension) ObjectSerializingUtils.fromString(serializedExtension.get()));
-            } catch (IOException | ClassNotFoundException e) {
-                logger.error("Error whilst deserializing extension for package: " + packageName);
-            }
-        }
-        return Optional.empty();
     }
 }
