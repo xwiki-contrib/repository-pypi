@@ -73,9 +73,6 @@ import org.xwiki.extension.version.internal.DefaultVersion;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import net.lingala.zip4j.core.ZipFile;
-import net.lingala.zip4j.exception.ZipException;
-
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
@@ -176,7 +173,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         try {
             PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, version);
             return PypiExtension.constructFrom(pypiPackageData, this, licenseManager, httpClientFactory);
-        } catch (HttpException | ResolveException e) {
+        } catch (HttpException e) {
             throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
         }
     }
@@ -234,7 +231,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
      * @throws ResolveException -
      */
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
-            throws HttpException, ResolveException
+            throws HttpException
     {
         URI uri = null;
         try {
@@ -246,7 +243,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 uri = new URI(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
             }
         } catch (URISyntaxException e) {
-            new ResolveException("Problem with created URI for resolving package info", e);
+            new HttpException("Problem with created URI for resolving package info", e);
         }
 
         InputStream inputStream = PyPiHttpUtils.performGet(uri, httpClientFactory, localContext);

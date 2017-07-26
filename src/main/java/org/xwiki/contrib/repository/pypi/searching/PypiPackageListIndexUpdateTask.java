@@ -46,22 +46,18 @@ import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.Term;
 import org.apache.lucene.store.FSDirectory;
 import org.slf4j.Logger;
 import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
-import org.xwiki.contrib.repository.pypi.PypiExtension;
 import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.dto.packagesInJython.PackagesInJython;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
-import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.environment.Environment;
-import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
 /**
@@ -155,7 +151,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
                     Document newDocument = createNewDocument(packageDataFromApi);
                     indexWriter.addDocument(newDocument);
                 }
-            } catch (ResolveException | HttpException e) {
+            } catch (HttpException e) {
                 logger.debug("Could not resolve " + packageName + " package", e);
             } catch (IOException e) {
                 logger.debug("IO problems whilst serializing " + packageName + " package extension", e);
@@ -164,7 +160,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     }
 
     private Document createNewDocument(String packageName, String version)
-            throws ResolveException, HttpException, IOException
     {
         Document document = new Document();
         document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
@@ -174,7 +169,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     }
 
     private Document createNewDocument(PypiPackageJSONDto pypiPackageJSONDto)
-            throws ResolveException, HttpException, IOException
     {
         String packageName = pypiPackageJSONDto.getInfo().getName();
         String version = pypiPackageJSONDto.getInfo().getVersion();
