@@ -20,10 +20,8 @@
 package org.xwiki.contrib.repository.pypi.searching;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.LinkedList;
@@ -49,8 +47,6 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.slf4j.Logger;
 import org.xml.sax.Attributes;
@@ -60,11 +56,11 @@ import org.xwiki.contrib.repository.pypi.PypiExtension;
 import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.dto.packagesInJython.PackagesInJython;
-import org.xwiki.contrib.repository.pypi.utils.ObjectSerializingUtils;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.environment.Environment;
-import org.xwiki.extension.Extension;
 import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
@@ -101,35 +97,23 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     @Override public void run()
     {
         logger.info("Start of update lucene index task");
-        boolean indexUpdated = false;
+        boolean newIndexCreated = false;
         boolean isFirstUpdate = false;
         File currentIndex = pypiPackageListIndexDirectory.get();
         File indexDir = environment.getTemporaryDirectory();
         if (currentIndex == null) {
             isFirstUpdate = true;
-        } else {
-            try {
-                FileUtils.copyDirectory(currentIndex, indexDir);
-            } catch (IOException e) {
-                logger.error("Could not copy current lucene index for pypi packages to new directory", e);
-                return;
-            }
         }
         IndexWriter indexWriter = null;
         Optional<InputStream> htmlPageInputStream = null;
         try {
-            Directory indexDirectory = FSDirectory.open(indexDir.toPath());
-            indexWriter = new IndexWriter(indexDirectory, new IndexWriterConfig(new StandardAnalyzer()));
-            htmlPageInputStream = getHtmlPageInputStream();
+            indexWriter =
+                    new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()));
+            htmlPageInputStream = getSimpleApiHtmlPageInputStream();
             if (htmlPageInputStream.isPresent()) {
                 List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
                 packageNames = removePackagesIncludedInJython(packageNames);
-                if (isFirstUpdate) {
-                    addAllValidPackagesToIndex(indexWriter, packageNames);
-                } else {
-                    updatePackageIndex(indexWriter, currentIndex, packageNames);
-                }
-                indexUpdated = true;
+                addAllValidPackagesToIndex(indexWriter, packageNames);
             }
         } catch (IOException e) {
             logger.error("IO problem whilst updating python package index", e);
@@ -139,7 +123,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             IOUtils.closeQuietly(indexWriter);
             IOUtils.closeQuietly(htmlPageInputStream.orElse(null));
         }
-        if (indexUpdated) {
+        if (newIndexCreated) {
             File previousIndexDir = pypiPackageListIndexDirectory.get();
             pypiPackageListIndexDirectory.set(indexDir);
             try {
@@ -150,8 +134,9 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
 
             }
             logger.info("End of update lucene index task. Pypi packages list index updated");
+        } else {
+            logger.info("End of update lucene index task. Pypi packages list update called but index not updated");
         }
-        logger.info("End of update lucene index task. Pypi packages list update called but index not updated");
     }
 
     private List<String> removePackagesIncludedInJython(List<String> packageNames)
@@ -160,39 +145,16 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         return packageNames;
     }
 
-    private void updatePackageIndex(IndexWriter indexWriter, File currentIndex, List<String> packageNames)
-            throws IOException
-    {
-        PypiPackageSearcher pypiPackageSearcher = new PypiPackageSearcher(currentIndex, logger);
-        for (String packageName : packageNames) {
-            try {
-                Optional<String> packageVersion = pypiPackageSearcher.searchOneAndGetItsVersion(packageName);
-                if (packageVersion.isPresent()) {
-                    //check if there's newer version
-                    String newestVersion =
-                            pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty()).getInfo()
-                                    .getVersion();
-                    if (PypiUtils.isSecondVersionNewer(packageVersion.get(), newestVersion)) {
-                        Document newDocument = createNewDocument(packageName);
-                        indexWriter.updateDocument(new Term(LuceneParameters.PACKAGE_NAME, packageName), newDocument);
-                    }
-                } else {
-                    Document newDocument = createNewDocument(packageName);
-                    indexWriter.addDocument(newDocument);
-                }
-            } catch (HttpException | ResolveException e) {
-                logger.debug("Cannot obtain newer version for package " + packageName);
-            }
-        }
-    }
-
     private void addAllValidPackagesToIndex(IndexWriter indexWriter, List<String> packageNames)
     {
         packageNames.parallelStream().forEach(packageName -> {
-
             try {
-                indexWriter.addDocument(createNewDocument(packageName));
-                logger.info("[" + packageName + "] added to index");
+                PypiPackageJSONDto packageDataFromApi =
+                        pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty());
+                if (PypiUtils.isPackageValidForXwiki(packageDataFromApi)) {
+                    Document newDocument = createNewDocument(packageDataFromApi);
+                    indexWriter.addDocument(newDocument);
+                }
             } catch (ResolveException | HttpException e) {
                 logger.debug("Could not resolve " + packageName + " package", e);
             } catch (IOException e) {
@@ -201,7 +163,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         });
     }
 
-    private Document createNewDocument(String packageName, String version, PypiExtension pypiExtension)
+    private Document createNewDocument(String packageName, String version)
             throws ResolveException, HttpException, IOException
     {
         Document document = new Document();
@@ -211,13 +173,12 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         return document;
     }
 
-    private Document createNewDocument(String packageName) throws ResolveException, HttpException, IOException
+    private Document createNewDocument(PypiPackageJSONDto pypiPackageJSONDto)
+            throws ResolveException, HttpException, IOException
     {
-        PypiExtension pypiExtension =
-                (PypiExtension) pypiExtensionRepository
-                        .getPythonPackageExtension(packageName, Optional.empty());
-        String version = PypiUtils.getVersion(pypiExtension.getId()).get();
-        return createNewDocument(packageName, version, pypiExtension);
+        String packageName = pypiPackageJSONDto.getInfo().getName();
+        String version = pypiPackageJSONDto.getInfo().getVersion();
+        return createNewDocument(packageName, version);
     }
 
     protected List<String> parseHtmlPageToPackagenames(InputStream is)
@@ -230,12 +191,13 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         return handler.getPackageNames();
     }
 
-    public Optional<InputStream> getHtmlPageInputStream()
+    public Optional<InputStream> getSimpleApiHtmlPageInputStream()
     {
         try {
             return Optional.of(
                     PyPiHttpUtils
-                            .performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE), httpClientFactory, localContext));
+                            .performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API), httpClientFactory,
+                                    localContext));
         } catch (HttpException e) {
             logger.error("Failed to get list of python packages from PyPi", e);
         } catch (URISyntaxException e) {

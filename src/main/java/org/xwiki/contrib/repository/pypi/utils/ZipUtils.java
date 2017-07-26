@@ -34,7 +34,6 @@ public class ZipUtils
 
     public static void unpack(File zipDir, File indexDir) throws ZipException
     {
-
         ZipFile zipFile = new ZipFile(zipDir);
         zipFile.extractAll(indexDir.getPath());
     }

@@ -38,6 +38,7 @@ import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
+import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.extension.DefaultExtensionDependency;
 import org.xwiki.extension.ExtensionDependency;
 import org.xwiki.extension.ResolveException;
@@ -101,7 +102,6 @@ public class RequiredDistributions
                         packageName = matcher.group(2);
                         String versionPart = matcher.group(4);
                         versionConstraint = getVersionOfDependency(versionPart);
-
                     } else if (requiredDistNoVersion.matcher(line).matches()) {
                         Matcher matcher = requiredDistNoVersion.matcher(line);
                         matcher.find();
@@ -133,9 +133,7 @@ public class RequiredDistributions
         try {
             PypiPackageJSONDto pypiPackageData = pypiExtensionRepository
                     .getPypiPackageData(packageName, Optional.of(versionConstraint.getVersion().getValue()));
-            Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
-                    pypiPackageData.getEggOrWhlFileUrlDtoForVersion(versionConstraint.getVersion().getValue());
-            return eggOrWhlFileUrlDtoForVersion.isPresent();
+            return PypiUtils.isPackageValidForXwiki(pypiPackageData);
         } catch (HttpException | ResolveException e) {
             return false;
         }
@@ -186,6 +184,6 @@ public class RequiredDistributions
                 //shouldNeverHappen
                 return null;
             }
-        }).filter(Objects::nonNull).findFirst().orElse(null); // TODO: 25.07.2017 make it throw exception
+        }).filter(Objects::nonNull).findFirst().orElse(null);
     }
 }

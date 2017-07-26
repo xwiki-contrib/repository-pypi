@@ -136,14 +136,11 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     {
         try {
             URL inputUrl = getClass().getResource("/luceneIndexOfValidPackages/index.zip");
-            File zipFile = environment.getTemporaryDirectory();
-            zipFile = new File(zipFile.getAbsolutePath() + File.separator + "index.zip");
+            File zipFile = new File(environment.getTemporaryDirectory().getAbsolutePath() + File.separator + "index.zip");
             zipFile.createNewFile();
             FileUtils.copyURLToFile(inputUrl, zipFile);
 
-            //unzip
             File indexDir = environment.getTemporaryDirectory();
-
             ZipUtils.unpack(zipFile, indexDir);
             FileUtils.forceDelete(zipFile);
             pypiPackageListIndexDirectory = new AtomicReference<>(indexDir);
@@ -214,7 +211,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 result.add(versions.get(i));
             }
 
-            return new CollectionIterableResult<Version>(versions.size(), offset, result);
+            return new CollectionIterableResult<>(versions.size(), offset, result);
         } catch (HttpException e) {
             throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
         }
@@ -273,7 +270,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             }
         } );
 
-        return new CollectionIterableResult(packageNames.getTotalHits(), packageNames.getTotalHits(), extensions);
+        return new CollectionIterableResult(packageNames.getTotalHits(), packageNames.getOffset(), extensions);
     }
 
     private PypiPackageSearcher getPypiPackageSearcher()

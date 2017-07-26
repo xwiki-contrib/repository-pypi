@@ -50,7 +50,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
 {
     private Pattern metadataFilename = Pattern.compile(".*.dist-info/METADATA$");
 
-    private String distributionType;
+    private String pythonDistributionType;
 
     private PypiExtension(ExtensionRepository repository,
             ExtensionId id, String type)
@@ -91,7 +91,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         pypiExtension.addRepository(pypiExtensionRepository.getDescriptor());
         pypiExtension.setRecommended(false);
 
-        pypiExtension.setDistributionType(fileUrlDtoForVersion.getPackagetype());
+        pypiExtension.setPythonDistributionType(fileUrlDtoForVersion.getPackagetype());
         //setFile
         try {
             URI uriToDownload = new URI(fileUrlDtoForVersion.getUrl());
@@ -109,7 +109,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
     private void addDependencies(PypiExtensionRepository pypiExtensionRepository) throws ResolveException
     {
         ZipInputStream zis = null;
-        if (PypiParameters.PACKAGE_TYPE_WHEEL.equals(getDistributionType())) {
+        if (PypiParameters.PACKAGE_TYPE_WHEEL.equals(getPythonDistributionType())) {
             try {
                 zis = new ZipInputStream(getFile().openStream());
                 for (ZipEntry entry = zis.getNextEntry(); entry != null; entry = zis.getNextEntry()) {
@@ -127,7 +127,8 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
                 IOUtils.closeQuietly(zis);
             }
         } else {
-            //not supported for other types of package
+            throw new ResolveException(
+                    "Not supported package type: " + getPythonDistributionType() + ". Package name: " + getName());
         }
     }
 
@@ -148,17 +149,17 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
      *
      * @return
      */
-    public String getDistributionType()
+    public String getPythonDistributionType()
     {
-        return distributionType;
+        return pythonDistributionType;
     }
 
     /**
      * @param distributionType -
      */
-    public void setDistributionType(String distributionType)
+    public void setPythonDistributionType(String distributionType)
     {
-        this.distributionType = distributionType;
+        this.pythonDistributionType = distributionType;
     }
 
     public String getExpectedMetadataFilename()

@@ -23,6 +23,8 @@ import java.util.Optional;
 
 import org.apache.maven.artifact.versioning.DefaultArtifactVersion;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.ResolveException;
@@ -78,4 +80,12 @@ final public class PypiUtils
     {
         return (new DefaultArtifactVersion(currentVersion).compareTo(new DefaultArtifactVersion(newestVersion))) < 0 ;
     }
+
+    public static boolean isPackageValidForXwiki(PypiPackageJSONDto packageData)
+    {
+        Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
+                packageData.getEggOrWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
+        return eggOrWhlFileUrlDtoForVersion.isPresent();
+    }
+
 }

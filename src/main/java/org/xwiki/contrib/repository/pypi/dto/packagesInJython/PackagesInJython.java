@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class PackagesInJython
 {
     private Set<String> packages;
+
     private static PackagesInJython packagesInJython = null;
 
     private static ObjectMapper objectMapper = new ObjectMapper();
@@ -44,10 +45,11 @@ public class PackagesInJython
 
     public static PackagesInJython getPackagesIncludedInJython()
     {
-        if(packagesInJython == null){
+        if (packagesInJython == null) {
             try {
-                packagesInJython = objectMapper.readValue(PackagesInJython.class.getResourceAsStream("/packagesIncludedInJython.json"),
-                        PackagesInJython.class);
+                packagesInJython = objectMapper
+                        .readValue(PackagesInJython.class.getResourceAsStream("/packagesIncludedInJython.json"),
+                                PackagesInJython.class);
             } catch (IOException e) {
                 //should never happen
             }
@@ -55,7 +57,8 @@ public class PackagesInJython
         return packagesInJython;
     }
 
-    public boolean contains(String packageName){
-        return packages.contains(packageName);
+    public boolean contains(String packageName)
+    {
+        return getPackages().contains(packageName);
     }
 }
