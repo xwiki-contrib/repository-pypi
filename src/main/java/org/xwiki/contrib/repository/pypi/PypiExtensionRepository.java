@@ -111,8 +111,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     private PypiPackageSearcher packageSearcher;
 
     /**
-     * @return -
      * @param extensionRepositoryDescriptor -
+     * @return -
      */
     public PypiExtensionRepository setUpRepository(ExtensionRepositoryDescriptor extensionRepositoryDescriptor)
     {
@@ -137,7 +137,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     {
         try {
             URL inputUrl = getClass().getResource("/luceneIndexOfValidPackages/index.zip");
-            File zipFile = new File(environment.getTemporaryDirectory().getAbsolutePath() + File.separator + "index.zip");
+            File zipFile =
+                    new File(environment.getTemporaryDirectory().getAbsolutePath() + File.separator + "index.zip");
             zipFile.createNewFile();
             FileUtils.copyURLToFile(inputUrl, zipFile);
 
@@ -185,7 +186,13 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     {
         String id = extensionDependency.getId();
         String version = extensionDependency.getVersionConstraint().getVersion().getValue();
-        return resolve(new ExtensionId(id, version));
+        ExtensionId extensionId = new ExtensionId(id, version);
+        try {
+            return resolve(extensionId);
+        } catch (ResolveException e) {
+            //if there's no resolvable dependency in given version check the newest
+            return getPythonPackageExtension(PypiUtils.getPackageName(extensionId), Optional.empty());
+        }
     }
 
     @Override
@@ -218,6 +225,14 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         }
     }
 
+    /**
+     *
+     * @param packageName -
+     * @param version -
+     * @return -
+     * @throws HttpException -
+     * @throws ResolveException -
+     */
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
             throws HttpException, ResolveException
     {
@@ -269,7 +284,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             } catch (ResolveException e) {
                 logger.debug("Could nor resolve extension that is present in lucene index: " + packageName, e);
             }
-        } );
+        });
 
         return new CollectionIterableResult(packageNames.getTotalHits(), packageNames.getOffset(), extensions);
     }

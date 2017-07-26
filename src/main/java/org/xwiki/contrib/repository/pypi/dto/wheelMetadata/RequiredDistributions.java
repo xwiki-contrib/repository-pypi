@@ -112,31 +112,14 @@ public class RequiredDistributions
                     } else {
                         continue;
                     }
-                    if (isDependencyResolvable(packageName, versionConstraint, pypiExtensionRepository)) {
-                        dependencies.add(new DefaultExtensionDependency(
-                                PypiParameters.DEFAULT_GROUPID + ":" + packageName, versionConstraint));
-                    } else {
-                        throw new ResolveException(
-                                "Dependency: " + packageName + " not resolvable");
-                    }
+                    dependencies.add(new DefaultExtensionDependency(
+                            PypiParameters.DEFAULT_GROUPID + ":" + packageName, versionConstraint));
                 }
             }
         } catch (IOException e) {
             throw new ResolveException("Could not open downloaded package to read dependencies");
         }
         return new RequiredDistributions(dependencies);
-    }
-
-    private static boolean isDependencyResolvable(String packageName, VersionConstraint versionConstraint,
-            PypiExtensionRepository pypiExtensionRepository)
-    {
-        try {
-            PypiPackageJSONDto pypiPackageData = pypiExtensionRepository
-                    .getPypiPackageData(packageName, Optional.of(versionConstraint.getVersion().getValue()));
-            return PypiUtils.isPackageValidForXwiki(pypiPackageData);
-        } catch (HttpException | ResolveException e) {
-            return false;
-        }
     }
 
     private static VersionConstraint getNewestVersionConstraint(String packageName,

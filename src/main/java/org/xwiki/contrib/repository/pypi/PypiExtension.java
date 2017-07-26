@@ -74,7 +74,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         String version = pypiPackageData.getInfo().getVersion();
         ExtensionId extensionId = new ExtensionId(PypiParameters.DEFAULT_GROUPID + ":" + packageName, version);
         Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional =
-                pypiPackageData.getEggOrWhlFileUrlDtoForVersion(version);
+                pypiPackageData.getWhlFileUrlDtoForVersion(version);
         if (!fileUrlDtoForVersionOptional.isPresent()) {
             throw new ResolveException("Extension [" + packageName
                     + "] found in repository but compatible python version distribution (Jython 2.7) not found");

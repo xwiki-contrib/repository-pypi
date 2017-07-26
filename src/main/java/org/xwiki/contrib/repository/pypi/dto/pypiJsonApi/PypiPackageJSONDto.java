@@ -94,6 +94,16 @@ public class PypiPackageJSONDto
      * @return -
      * @param releaseVersion - releaseVersion of package to be used to get url meta data
      */
+    public Optional<PypiPackageUrlDto> getWhlFileUrlDtoForVersion(String releaseVersion)
+    {
+        return getFileUrlDtoForVersion(releaseVersion,
+                Sets.newHashSet(PypiParameters.PACKAGE_TYPE_WHEEL));
+    }
+
+    /**
+     * @return -
+     * @param releaseVersion - releaseVersion of package to be used to get url meta data
+     */
     public Optional<PypiPackageUrlDto> getEggOrWhlFileUrlDtoForVersion(String releaseVersion)
     {
         return getFileUrlDtoForVersion(releaseVersion,
