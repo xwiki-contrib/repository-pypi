@@ -45,6 +45,7 @@ final public class PypiUtils
      * This method assumes that id for e.g. numpy package may be either: "org.python:numpy" or "numpy"
      *
      * @param extensionId -
+     * @return -
      * @throws ResolveException -
      */
     public static String getPackageName(ExtensionId extensionId) throws ResolveException
@@ -64,7 +65,6 @@ final public class PypiUtils
     /**
      * @param extensionId -
      * @return extracted version wrapped with Optional. If version is null or empty Optional is empty as well
-     * @throws ResolveException -
      */
     public static Optional<String> getVersion(ExtensionId extensionId)
     {

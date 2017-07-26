@@ -33,7 +33,11 @@ import java.util.Base64;
 public class ObjectSerializingUtils
 {
     /**
-     * Read the object from Base64 string.
+     *
+     * @param s -
+     * @return -
+     * @throws IOException -
+     * @throws ClassNotFoundException -
      */
     public static Object fromString(String s) throws IOException, ClassNotFoundException
     {
@@ -46,7 +50,10 @@ public class ObjectSerializingUtils
     }
 
     /**
-     * Write the object to a Base64 string.
+     *
+     * @param o -
+     * @return -
+     * @throws IOException -
      */
     public static String toString(Serializable o) throws IOException
     {

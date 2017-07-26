@@ -20,11 +20,13 @@
 package org.xwiki.contrib.repository.pypi.dto.packagesInJython;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Set;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+/**
+ *
+ */
 public class PackagesInJython
 {
     private Set<String> packages;

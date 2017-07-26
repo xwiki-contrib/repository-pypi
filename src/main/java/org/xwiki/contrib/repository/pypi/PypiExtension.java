@@ -63,6 +63,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
      * @param pypiExtensionRepository -
      * @param licenseManager -
      * @param httpClientFactory -
+     * @return -
      * @throws ResolveException -
      */
     public static PypiExtension constructFrom(PypiPackageJSONDto pypiPackageData,
@@ -147,7 +148,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
 
     /**
      *
-     * @return
+     * @return -
      */
     public String getPythonDistributionType()
     {

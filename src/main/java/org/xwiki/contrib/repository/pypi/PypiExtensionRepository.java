@@ -111,6 +111,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     private PypiPackageSearcher packageSearcher;
 
     /**
+     * @return -
      * @param extensionRepositoryDescriptor -
      */
     public PypiExtensionRepository setUpRepository(ExtensionRepositoryDescriptor extensionRepositoryDescriptor)

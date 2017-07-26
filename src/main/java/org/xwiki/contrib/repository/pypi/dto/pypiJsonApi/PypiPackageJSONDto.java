@@ -51,7 +51,7 @@ public class PypiPackageJSONDto
 
     /**
      * Gets Url metadata for the latest version of package
-     *
+     * @return -
      * @throws PypiApiException - when there's no downloadable version of this package
      */
     public Optional<PypiPackageUrlDto> getEggOrWhlUrlDtoForNewestVersion() throws PypiApiException
@@ -73,6 +73,7 @@ public class PypiPackageJSONDto
     }
 
     /**
+     * @return -
      * @param releaseVersion - releaseVersion of package to be used to get url meta data
      */
     public Optional<PypiPackageUrlDto> getZipUrlDtoForVersion(String releaseVersion)
@@ -81,6 +82,7 @@ public class PypiPackageJSONDto
     }
 
     /**
+     * @return -
      * @param releaseVersion - releaseVersion of package to be used to get url meta data
      */
     public Optional<PypiPackageUrlDto> getEggFileUrlDtoForVersion(String releaseVersion)
@@ -89,6 +91,7 @@ public class PypiPackageJSONDto
     }
 
     /**
+     * @return -
      * @param releaseVersion - releaseVersion of package to be used to get url meta data
      */
     public Optional<PypiPackageUrlDto> getEggOrWhlFileUrlDtoForVersion(String releaseVersion)
