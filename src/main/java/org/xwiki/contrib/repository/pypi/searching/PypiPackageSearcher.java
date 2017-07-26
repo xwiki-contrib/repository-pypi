@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
+import org.apache.lucene.document.Document;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -65,6 +66,19 @@ public class PypiPackageSearcher
         IndexReader reader = DirectoryReader.open(indexDirectory);
         indexSearcher = new IndexSearcher(reader);
         analyzer = new StandardAnalyzer();
+    }
+
+    public Optional<Document> searchOneAndGetItsDocument(String packageName)
+    {
+        Optional<Integer> documentId = searchOneAndGetItsDocumentId(packageName);
+        if(documentId.isPresent()){
+            try {
+                return Optional.of(indexSearcher.doc(documentId.get()));
+            } catch (IOException e) {
+                logger.error("Could not get document of id: " + documentId.get());
+            }
+        }
+        return Optional.empty();
     }
 
     public Optional<String> searchOneAndGetItsVersion(String packageName)

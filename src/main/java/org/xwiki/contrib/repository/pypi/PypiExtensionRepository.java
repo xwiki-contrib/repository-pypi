@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -35,6 +36,7 @@ import java.util.stream.Collectors;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.lucene.queryparser.classic.ParseException;
@@ -49,6 +51,7 @@ import org.xwiki.contrib.repository.pypi.searching.PypiPackageListIndexUpdateTas
 import org.xwiki.contrib.repository.pypi.searching.PypiPackageSearcher;
 import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
+import org.xwiki.contrib.repository.pypi.utils.ZipUtils;
 import org.xwiki.environment.Environment;
 import org.xwiki.extension.Extension;
 import org.xwiki.extension.ExtensionDependency;
@@ -68,6 +71,9 @@ import org.xwiki.extension.version.Version;
 import org.xwiki.extension.version.internal.DefaultVersion;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
+import net.lingala.zip4j.core.ZipFile;
+import net.lingala.zip4j.exception.ZipException;
 
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
@@ -100,7 +106,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     private Timer timer;
 
     private AtomicReference<File> pypiPackageListIndexDirectory =
-            new AtomicReference<>(new File("D:\\XWiki\\varia\\luceneIndex"));
+            new AtomicReference<>(new File("D:\\XWiki\\varia\\luceneIndexDependenciesFinal"));
 
     private PypiPackageSearcher packageSearcher;
 
@@ -116,14 +122,33 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     @Override public void initialize() throws InitializationException
     {
+        initializePackageListIndexDirectory();
         timer = new Timer();
         PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask =
                 new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
                         logger);
-        pypiPackageListIndexUpdateTask.prepareIndex();
+//        pypiPackageListIndexUpdateTask.prepareIndex();
         long interval = 1000 * 60 * 60 * 12;
         timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
         // TODO: 24.07.2017 you may put this update interval in configuration
+    }
+
+    private void initializePackageListIndexDirectory() throws InitializationException
+    {
+        try {
+            URL inputUrl = getClass().getResource("/luceneIndexOfValidPackages/index.zip");
+            File zipDir = environment.getTemporaryDirectory();
+            zipDir = new File(zipDir.getAbsolutePath() + File.separator + "index.zip");
+            zipDir.createNewFile();
+            FileUtils.copyURLToFile(inputUrl, zipDir);
+
+            //unzip
+            File indexDir = environment.getTemporaryDirectory();
+
+            ZipUtils.unpack(zipDir, indexDir);
+        } catch (Exception e) {
+            throw new InitializationException("Could not copy lucene index to local directory", e);
+        }
     }
 
     @Override public void dispose() throws ComponentLifecycleException
@@ -142,12 +167,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     public PypiExtension getPythonPackageExtension(String packageName, Optional<String> version) throws ResolveException
     {
-        Optional<String> packageVersion = getPypiPackageSearcher().searchOneAndGetItsVersion(packageName);
-        if(packageVersion.isPresent() && packageVersion.get().equals(version)) {
-            return getPypiPackageSearcher().searchOneAndExtension(packageName).get();
-        } else {
-            return resolvePythonPackageExtension(packageName, version);
-        }
+        return resolvePythonPackageExtension(packageName, version);
     }
 
     private PypiExtension resolvePythonPackageExtension(String packageName, Optional<String> version)

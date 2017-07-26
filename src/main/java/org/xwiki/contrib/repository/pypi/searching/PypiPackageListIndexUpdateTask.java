@@ -20,17 +20,17 @@
 package org.xwiki.contrib.repository.pypi.searching;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -59,10 +59,12 @@ import org.xml.sax.helpers.DefaultHandler;
 import org.xwiki.contrib.repository.pypi.PypiExtension;
 import org.xwiki.contrib.repository.pypi.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.PypiParameters;
+import org.xwiki.contrib.repository.pypi.dto.packagesInJython.PackagesInJython;
 import org.xwiki.contrib.repository.pypi.utils.ObjectSerializingUtils;
 import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.environment.Environment;
+import org.xwiki.extension.Extension;
 import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
@@ -121,6 +123,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             htmlPageInputStream = getHtmlPageInputStream();
             if (htmlPageInputStream.isPresent()) {
                 List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
+                packageNames = removePackagesIncludedInJython(packageNames);
                 if (isFirstUpdate) {
                     addAllValidPackagesToIndex(indexWriter, packageNames);
                 } else {
@@ -140,7 +143,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             File previousIndexDir = pypiPackageListIndexDirectory.get();
             pypiPackageListIndexDirectory.set(indexDir);
             try {
-                if(previousIndexDir != null) {
+                if (previousIndexDir != null) {
                     FileUtils.forceDelete(previousIndexDir);
                 }
             } catch (Exception e) {
@@ -149,6 +152,12 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             logger.info("End of update lucene index task. Pypi packages list index updated");
         }
         logger.info("End of update lucene index task. Pypi packages list update called but index not updated");
+    }
+
+    private List<String> removePackagesIncludedInJython(List<String> packageNames)
+    {
+        packageNames.removeAll(PackagesInJython.getPackagesIncludedInJython().getPackages());
+        return packageNames;
     }
 
     private void updatePackageIndex(IndexWriter indexWriter, File currentIndex, List<String> packageNames)
@@ -171,8 +180,6 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
                     Document newDocument = createNewDocument(packageName);
                     indexWriter.addDocument(newDocument);
                 }
-            } catch (ParseException e) {
-                logger.error("Problem with parsing query to Lucene index. Query: '" + packageName + "'");
             } catch (HttpException | ResolveException e) {
                 logger.debug("Cannot obtain newer version for package " + packageName);
             }
@@ -208,10 +215,10 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
 //        } catch (IOException e) {
 //            logger.debug("IO problems whilst adding lucene documents", e);
 //        }
-
         packageNames.parallelStream().forEach(packageName -> {
+
             try {
-                 indexWriter.addDocument(createNewDocument(packageName));
+                indexWriter.addDocument(createNewDocument(packageName));
                 logger.info("[" + packageName + "] added to index");
             } catch (ResolveException | HttpException e) {
                 logger.debug("Could not resolve " + packageName + " package", e);
@@ -221,18 +228,24 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         });
     }
 
-    private Document createNewDocument(String packageName) throws ResolveException, HttpException, IOException
+    private Document createNewDocument(String packageName, String version, PypiExtension pypiExtension)
+            throws ResolveException, HttpException, IOException
     {
-        PypiExtension pypiExtension =
-                (PypiExtension) pypiExtensionRepository
-                        .resolvePythonPackageExtension(packageName, Optional.empty());
-        String version = PypiUtils.getVersion(pypiExtension.getId()).get();
         Document document = new Document();
         document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
         document.add(new StringField(LuceneParameters.ID, packageName, Field.Store.YES));
         document.add(new StoredField(LuceneParameters.VERSION, version));
         document.add(new StoredField(LuceneParameters.EXTENSION, ObjectSerializingUtils.toString(pypiExtension)));
         return document;
+    }
+
+    private Document createNewDocument(String packageName) throws ResolveException, HttpException, IOException
+    {
+        PypiExtension pypiExtension =
+                (PypiExtension) pypiExtensionRepository
+                        .getPythonPackageExtension(packageName, Optional.empty());
+        String version = PypiUtils.getVersion(pypiExtension.getId()).get();
+        return createNewDocument(packageName, version, pypiExtension);
     }
 
     protected List<String> parseHtmlPageToPackagenames(InputStream is)
@@ -257,6 +270,54 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             //should never happen
         }
         return Optional.empty();
+    }
+
+    public void prepareIndex()
+    {
+        LinkedList<String> validPackages = new LinkedList<>();
+        try {
+            Optional<InputStream> htmlPageInputStream = getHtmlPageInputStream();
+            List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
+            File oldIndex = this.pypiPackageListIndexDirectory.get();
+            File indexDir = environment.getTemporaryDirectory();
+            Directory indexDirectory = FSDirectory.open(indexDir.toPath());
+            IndexWriter indexWriter = new IndexWriter(indexDirectory, new IndexWriterConfig(new StandardAnalyzer()));
+
+            PackagesInJython packagesIncludedInJython = PackagesInJython.getPackagesIncludedInJython();
+            PypiPackageSearcher pypiPackageSearcher = new PypiPackageSearcher(oldIndex, logger);
+            packageNames.parallelStream().forEach(packageName -> {
+                if (!packagesIncludedInJython.contains(packageName)) {
+                    Optional<Document> document = pypiPackageSearcher.searchOneAndGetItsDocument(packageName);
+                    if (document.isPresent()) {
+                        try {
+                            indexWriter.addDocument(document.get());
+                            validPackages.add(packageName);
+                        } catch (Exception e) {
+                            logger.info("[" + packageName + "] removed due to unresolvable dependencies");
+                        }
+                    }
+                }else {
+                    logger.info("[" + packageName + "] removed due to unresolvable dependencies");
+                }
+            });
+
+            indexWriter.commit();
+            indexWriter.close();
+        } catch (ParserConfigurationException e) {
+            e.printStackTrace();
+        } catch (SAXException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        File fileTowrite = new File("D:\\XWiki\\varia\\validPackages.txt");
+        try {
+            PrintWriter out = new PrintWriter(fileTowrite);
+            validPackages.stream().forEach(s -> out.println(s));
+            out.close();
+        } catch (FileNotFoundException e) {
+        }
     }
 
     class PypiPackageListSAXHandler extends DefaultHandler
