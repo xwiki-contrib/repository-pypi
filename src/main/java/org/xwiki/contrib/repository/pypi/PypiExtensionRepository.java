@@ -228,7 +228,6 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
      * @param version -
      * @return -
      * @throws HttpException -
-     * @throws ResolveException -
      */
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
             throws HttpException

@@ -37,7 +37,6 @@ import org.xwiki.extension.repository.ExtensionRepositoryManager;
 import org.xwiki.observation.AbstractEventListener;
 import org.xwiki.observation.event.Event;
 
-
 /**
  * This listener is only for execution configuration logic on installment.
  * It's a bit of workaround. Every listener is initialized by Observation Manager after registering it.
@@ -89,8 +88,7 @@ public class ExtensionPostInstallmentConfigListener extends AbstractEventListene
     private ExtensionRepositoryDescriptor obtainPypiRepositoryDescriptor()
     {
         try {
-            return new DefaultExtensionRepositoryDescriptor("PyPi", "pypi",
-                    new URI(PypiParameters.API_URL));
+            return new DefaultExtensionRepositoryDescriptor("PyPi", "pypi", new URI(PypiParameters.API_URL));
         } catch (URISyntaxException e) {
             // Should never happen
             return null;
