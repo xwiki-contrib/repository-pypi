@@ -55,7 +55,7 @@
         <xwiki.issueManagement.jira.id>PYPIREP</xwiki.issueManagement.jira.id>
         <xwiki.jacoco.instructionRatio>0.1</xwiki.jacoco.instructionRatio>
         <xwiki.release.jira.skip>false</xwiki.release.jira.skip>
-        <lucene.version>6.4.2</lucene.version>
+        <lucene.version>6.2.1</lucene.version>
     </properties>
 
     <dependencies>

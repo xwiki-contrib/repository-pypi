@@ -126,8 +126,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
                         logger);
         long interval = 1000 * 60 * 60 * 12;
-        timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
         // TODO: 24.07.2017 you may put this update interval in configuration
+        timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
     }
 
     private void initializePackageListIndexDirectory() throws InitializationException

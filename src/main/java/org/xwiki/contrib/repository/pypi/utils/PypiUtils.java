@@ -84,7 +84,7 @@ final public class PypiUtils
     public static boolean isPackageValidForXwiki(PypiPackageJSONDto packageData)
     {
         Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
-                packageData.getEggOrWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
+                packageData.getWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
         return eggOrWhlFileUrlDtoForVersion.isPresent();
     }
 

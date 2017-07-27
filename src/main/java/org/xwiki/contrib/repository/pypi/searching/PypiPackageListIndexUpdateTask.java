@@ -111,6 +111,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
                 packageNames = removePackagesIncludedInJython(packageNames);
                 addAllValidPackagesToIndex(indexWriter, packageNames);
             }
+            newIndexCreated = true;
         } catch (IOException e) {
             logger.error("IO problem whilst updating python package index", e);
         } catch (SAXException | ParserConfigurationException e) {
