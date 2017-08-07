@@ -1,4 +1,4 @@
-# Pypi Extensions Support
+# Extension Repository Connector - Pypi
 Extension extending Extension Module with possibility to import extension from Bintray repositories.
 
 * Project Lead: [Krzysztof Płachno](http://www.xwiki.org/xwiki/bin/view/XWiki/cristof_p)
