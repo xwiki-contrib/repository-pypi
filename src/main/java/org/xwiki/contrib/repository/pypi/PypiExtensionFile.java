@@ -21,7 +21,6 @@ package org.xwiki.contrib.repository.pypi;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.net.URI;
 
 import org.apache.http.HttpException;
@@ -34,7 +33,7 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
-public class PypiExtensionFile implements ExtensionFile, Serializable
+public class PypiExtensionFile implements ExtensionFile
 {
     private final URI uriToDownload;
 
