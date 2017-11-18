@@ -1,2 +1,2 @@
-org.xwiki.contrib.repository.pypi.ExtensionPostInstallmentConfigListener
-org.xwiki.contrib.repository.pypi.PypiExtensionRepository
+org.xwiki.contrib.repository.pypi.internal.ExtensionPostInstallmentConfigListener
+org.xwiki.contrib.repository.pypi.internal.PypiExtensionRepository
