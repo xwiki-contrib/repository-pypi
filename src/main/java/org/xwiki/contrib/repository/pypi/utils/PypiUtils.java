@@ -50,7 +50,20 @@ final public class PypiUtils
      */
     public static String getPackageName(ExtensionId extensionId) throws ResolveException
     {
-        String[] parts = extensionId.getId().split(":");
+        return getPackageName(extensionId.getId());
+    }
+
+    /**
+     * This method assumes that id for e.g. numpy package may be either: "org.python:numpy" or "numpy"
+     *
+     * @param extensionId -
+     * @return -
+     * @throws ResolveException -
+     * @since 1.1.1
+     */
+    public static String getPackageName(String extensionId) throws ResolveException
+    {
+        String[] parts = extensionId.split(":");
         if (parts.length > 1) {
             if (PypiParameters.DEFAULT_GROUPID.equals(parts[0])) {
                 return parts[1];
@@ -58,7 +71,7 @@ final public class PypiUtils
                 throw new ExtensionNotFoundException("That's not id of python package: " + extensionId);
             }
         } else {
-            return extensionId.getId();
+            return extensionId;
         }
     }
 
@@ -78,13 +91,13 @@ final public class PypiUtils
 
     public static boolean isSecondVersionNewer(String currentVersion, String newestVersion)
     {
-        return (new DefaultArtifactVersion(currentVersion).compareTo(new DefaultArtifactVersion(newestVersion))) < 0 ;
+        return (new DefaultArtifactVersion(currentVersion).compareTo(new DefaultArtifactVersion(newestVersion))) < 0;
     }
 
     public static boolean isPackageValidForXwiki(PypiPackageJSONDto packageData)
     {
         Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
-                packageData.getWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
+            packageData.getWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
         return eggOrWhlFileUrlDtoForVersion.isPresent();
     }
 

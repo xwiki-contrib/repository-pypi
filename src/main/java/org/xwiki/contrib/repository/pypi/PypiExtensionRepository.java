@@ -40,7 +40,6 @@ import javax.inject.Singleton;
 import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.lucene.queryparser.classic.ParseException;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.component.manager.ComponentLifecycleException;
@@ -60,7 +59,6 @@ import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionLicenseManager;
 import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.ResolveException;
-import org.xwiki.extension.internal.ExtensionFactory;
 import org.xwiki.extension.repository.AbstractExtensionRepository;
 import org.xwiki.extension.repository.ExtensionRepositoryDescriptor;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
@@ -80,15 +78,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 @Component(roles = PypiExtensionRepository.class)
 @Singleton
 public class PypiExtensionRepository extends AbstractExtensionRepository
-        implements Searchable, Initializable, Disposable
+    implements Searchable, Initializable, Disposable
 {
     private static ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
     private ExtensionLicenseManager licenseManager;
-
-    @Inject
-    private ExtensionFactory extensionFactory;
 
     @Inject
     private HttpClientFactory httpClientFactory;
@@ -118,13 +113,13 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         return this;
     }
 
-    @Override public void initialize() throws InitializationException
+    @Override
+    public void initialize() throws InitializationException
     {
         initializePackageListIndexDirectory();
         timer = new Timer();
-        PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask =
-                new PypiPackageListIndexUpdateTask(pypiPackageListIndexDirectory, this, environment, httpClientFactory,
-                        logger);
+        PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask = new PypiPackageListIndexUpdateTask(
+            pypiPackageListIndexDirectory, this, environment, httpClientFactory, logger);
         long interval = 1000 * 60 * 60 * 12;
         // TODO: 24.07.2017 you may put this update interval in configuration
         timer.schedule(pypiPackageListIndexUpdateTask, interval, interval);
@@ -135,7 +130,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         try {
             URL inputUrl = getClass().getResource("/luceneIndexOfValidPackages/index.zip");
             File zipFile =
-                    new File(environment.getTemporaryDirectory().getAbsolutePath() + File.separator + "index.zip");
+                new File(environment.getTemporaryDirectory().getAbsolutePath() + File.separator + "index.zip");
             zipFile.createNewFile();
             FileUtils.copyURLToFile(inputUrl, zipFile);
 
@@ -148,7 +143,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         }
     }
 
-    @Override public void dispose() throws ComponentLifecycleException
+    @Override
+    public void dispose() throws ComponentLifecycleException
     {
         timer.cancel();
         timer.purge();
@@ -168,7 +164,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     }
 
     private PypiExtension resolvePythonPackageExtension(String packageName, Optional<String> version)
-            throws ResolveException
+        throws ResolveException
     {
         try {
             PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, version);
@@ -187,7 +183,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         try {
             return resolve(extensionId);
         } catch (ResolveException e) {
-            //if there's no resolvable dependency in given version check the newest
+            // if there's no resolvable dependency in given version check the newest
             return getPythonPackageExtension(PypiUtils.getPackageName(extensionId), Optional.empty());
         }
     }
@@ -195,49 +191,51 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     @Override
     public IterableResult<Version> resolveVersions(String packageName, int offset, int nb) throws ResolveException
     {
+        String pypiPackage = PypiUtils.getPackageName(packageName);
+
         try {
-            PypiPackageJSONDto pypiPackageData = getPypiPackageData(packageName, Optional.empty());
+            PypiPackageJSONDto pypiPackageData = getPypiPackageData(pypiPackage, Optional.empty());
             List<Version> versions = pypiPackageData.getAvailableReleaseVersions().stream()
-                    .map(releaseVersion -> new DefaultVersion(releaseVersion)).collect(Collectors.toList());
+                .map(releaseVersion -> new DefaultVersion(releaseVersion)).collect(Collectors.toList());
 
             if (versions.isEmpty()) {
-                throw new ExtensionNotFoundException("No versions available for id [" + packageName + "]");
+                throw new ExtensionNotFoundException(
+                    "No versions available for id [" + packageName + " (" + pypiPackage + ")]");
             }
 
             if (nb == 0 || offset >= versions.size()) {
-                return new CollectionIterableResult<Version>(versions.size(), offset, Collections.<Version>emptyList());
+                return new CollectionIterableResult<>(versions.size(), offset, Collections.<Version>emptyList());
             }
 
             int fromId = offset < 0 ? 0 : offset;
             int toId = offset + nb > versions.size() || nb < 0 ? versions.size() : offset + nb;
 
-            List<Version> result = new ArrayList<Version>(toId - fromId);
+            List<Version> result = new ArrayList<>(toId - fromId);
             for (int i = fromId; i < toId; ++i) {
                 result.add(versions.get(i));
             }
 
             return new CollectionIterableResult<>(versions.size(), offset, result);
         } catch (HttpException e) {
-            throw new ResolveException("Failed to resolve package [" + packageName + "]", e);
+            throw new ResolveException("Failed to resolve package [" + packageName + " (" + pypiPackage + ")]", e);
         }
     }
 
     /**
-     *
      * @param packageName -
      * @param version -
      * @return -
      * @throws HttpException -
+     * @throws ExtensionNotFoundException
      */
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
-            throws HttpException
+        throws HttpException, ExtensionNotFoundException
     {
         URI uri = null;
         try {
             if (version.isPresent()) {
-                uri = new URI(
-                        PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
-                                .replace("{version}", version.get()));
+                uri = new URI(PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
+                    .replace("{version}", version.get()));
             } else {
                 uri = new URI(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
             }
@@ -247,27 +245,28 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
         InputStream inputStream = PyPiHttpUtils.performGet(uri, httpClientFactory, localContext);
 
+        if (inputStream == null) {
+            throw new ExtensionNotFoundException("Cannot find package with id [" + packageName + "] on pypi");
+        }
+
         try {
             return objectMapper.readValue(inputStream, PypiPackageJSONDto.class);
         } catch (IOException e) {
-            throw new HttpException(String.format("Failed to parse response body of request [%s]",
-                    uri), e);
+            throw new HttpException(String.format("Failed to parse response body of request [%s]", uri), e);
         }
     }
 
-    @Override public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage)
-            throws SearchException
+    @Override
+    public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage) throws SearchException
     {
         PypiPackageSearcher searcher = getPypiPackageSearcher();
         try {
             IterableResult<String> packageNames = searcher.search(searchQuery, offset, hitsPerPage);
             return toExtensions(packageNames);
-        } catch (ParseException e) {
-            logger.debug("Lucene query parser unable to parse query: " + searchQuery, e);
         } catch (IOException e) {
             logger.error("Lucene index searcher search exception", e);
         }
-        return new CollectionIterableResult(0, 0, Collections.emptyList());
+        return new CollectionIterableResult<>(0, 0, Collections.emptyList());
     }
 
     private IterableResult<Extension> toExtensions(IterableResult<String> packageNames)
@@ -282,7 +281,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             }
         });
 
-        return new CollectionIterableResult(packageNames.getTotalHits(), packageNames.getOffset(), extensions);
+        return new CollectionIterableResult<>(packageNames.getTotalHits(), packageNames.getOffset(), extensions);
     }
 
     private PypiPackageSearcher getPypiPackageSearcher()
@@ -291,8 +290,9 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             try {
                 packageSearcher = new PypiPackageSearcher(pypiPackageListIndexDirectory.get(), logger);
             } catch (IOException e) {
-                logger.error("Could not open lucene package list index from directory " + pypiPackageListIndexDirectory
-                        .get(), e);
+                logger.error(
+                    "Could not open lucene package list index from directory " + pypiPackageListIndexDirectory.get(),
+                    e);
             }
         }
         return packageSearcher;

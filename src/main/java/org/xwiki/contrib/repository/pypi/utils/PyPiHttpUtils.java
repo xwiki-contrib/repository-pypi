@@ -63,6 +63,8 @@ public class PyPiHttpUtils
                 throw new HttpException(String.format("Failed to parse response body of request [%s]",
                         getMethod.getURI()), e);
             }
+        } else if (statusCode == HttpStatus.SC_NOT_FOUND) {
+            return null;
         } else {
             throw new HttpException(String.format("Invalid answer [%s] from the server when requesting [%s]",
                     response.getStatusLine().getStatusCode(), getMethod.getURI()));

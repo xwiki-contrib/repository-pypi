@@ -58,6 +58,7 @@ import org.xwiki.contrib.repository.pypi.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.utils.PyPiHttpUtils;
 import org.xwiki.contrib.repository.pypi.utils.PypiUtils;
 import org.xwiki.environment.Environment;
+import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
 /**
@@ -79,8 +80,8 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     private Logger logger;
 
     public PypiPackageListIndexUpdateTask(AtomicReference<File> pypiPackageListIndexDirectory,
-            PypiExtensionRepository pypiExtensionRepository, Environment environment,
-            HttpClientFactory httpClientFactory, Logger logger)
+        PypiExtensionRepository pypiExtensionRepository, Environment environment, HttpClientFactory httpClientFactory,
+        Logger logger)
     {
         this.pypiPackageListIndexDirectory = pypiPackageListIndexDirectory;
         this.pypiExtensionRepository = pypiExtensionRepository;
@@ -90,7 +91,8 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         this.logger = logger;
     }
 
-    @Override public void run()
+    @Override
+    public void run()
     {
         logger.info("Start of update lucene index task");
         boolean newIndexCreated = false;
@@ -104,7 +106,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         Optional<InputStream> htmlPageInputStream = null;
         try {
             indexWriter =
-                    new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()));
+                new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()));
             htmlPageInputStream = getSimpleApiHtmlPageInputStream();
             if (htmlPageInputStream.isPresent()) {
                 List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
@@ -147,12 +149,13 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         packageNames.parallelStream().forEach(packageName -> {
             try {
                 PypiPackageJSONDto packageDataFromApi =
-                        pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty());
+                    this.pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty());
+
                 if (PypiUtils.isPackageValidForXwiki(packageDataFromApi)) {
                     Document newDocument = createNewDocument(packageDataFromApi);
                     indexWriter.addDocument(newDocument);
                 }
-            } catch (HttpException e) {
+            } catch (ExtensionNotFoundException | HttpException e) {
                 logger.debug("Could not resolve " + packageName + " package", e);
             } catch (IOException e) {
                 logger.debug("IO problems whilst serializing " + packageName + " package extension", e);
@@ -177,7 +180,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     }
 
     protected List<String> parseHtmlPageToPackagenames(InputStream is)
-            throws ParserConfigurationException, SAXException, IOException
+        throws ParserConfigurationException, SAXException, IOException
     {
         SAXParserFactory parserFactor = SAXParserFactory.newInstance();
         SAXParser parser = parserFactor.newSAXParser();
@@ -189,14 +192,12 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     public Optional<InputStream> getSimpleApiHtmlPageInputStream()
     {
         try {
-            return Optional.of(
-                    PyPiHttpUtils
-                            .performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API), httpClientFactory,
-                                    localContext));
+            return Optional.of(PyPiHttpUtils.performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API),
+                httpClientFactory, localContext));
         } catch (HttpException e) {
             logger.error("Failed to get list of python packages from PyPi", e);
         } catch (URISyntaxException e) {
-            //should never happen
+            // should never happen
         }
         return Optional.empty();
     }
@@ -208,8 +209,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         private boolean aIsOpened = false;
 
         @Override
-        public void startElement(String uri, String localName, String qName, Attributes attributes)
-                throws SAXException
+        public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException
         {
             switch (qName) {
                 case "a":
@@ -217,7 +217,8 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             }
         }
 
-        @Override public void characters(char[] ch, int start, int length) throws SAXException
+        @Override
+        public void characters(char[] ch, int start, int length) throws SAXException
         {
             if (aIsOpened) {
                 String packageName = new String(ch, start, length);
@@ -225,7 +226,8 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
             }
         }
 
-        @Override public void endElement(String uri, String localName, String qName) throws SAXException
+        @Override
+        public void endElement(String uri, String localName, String qName) throws SAXException
         {
             switch (qName) {
                 case "a":

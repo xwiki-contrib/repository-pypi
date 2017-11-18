@@ -21,13 +21,11 @@ package org.xwiki.contrib.repository.pypi.searching;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -40,21 +38,16 @@ import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.RegexpQuery;
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.FSDirectory;
 import org.slf4j.Logger;
-import org.xwiki.contrib.repository.pypi.PypiExtension;
-import org.xwiki.contrib.repository.pypi.utils.ObjectSerializingUtils;
-import org.xwiki.extension.Extension;
 import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
 
-import jdk.nashorn.internal.runtime.regexp.joni.Regex;
-
 /**
- * Created by Krzysztof on 24.07.2017.
+ * @since 1.0
+ * @version $Id$
  */
 public class PypiPackageSearcher
 {
@@ -70,6 +63,7 @@ public class PypiPackageSearcher
     {
         this.indexDirectoryFile = indexDirectoryFile;
         this.logger = logger;
+
         Directory indexDirectory = FSDirectory.open(indexDirectoryFile.toPath());
         IndexReader reader = DirectoryReader.open(indexDirectory);
         indexSearcher = new IndexSearcher(reader);
@@ -86,6 +80,7 @@ public class PypiPackageSearcher
                 logger.error("Could not get document of id: " + documentId.get());
             }
         }
+
         return Optional.empty();
     }
 
@@ -104,6 +99,7 @@ public class PypiPackageSearcher
                 logger.error("Could not get document of id: " + id.get());
             }
         }
+
         return Optional.empty();
     }
 
@@ -121,11 +117,11 @@ public class PypiPackageSearcher
         } catch (IOException e) {
             logger.debug("Could not perform searching in lucene index for package: " + packageName, e);
         }
+
         return Optional.empty();
     }
 
-    public IterableResult<String> search(String searchQuery, int offset, int hitsPerPage)
-            throws ParseException, IOException
+    public IterableResult<String> search(String searchQuery, int offset, int hitsPerPage) throws IOException
     {
         Query q = new RegexpQuery(new Term(LuceneParameters.PACKAGE_NAME, ".*" + searchQuery + ".*"));
         TopDocs hits = indexSearcher.search(q, LuceneParameters.MAX_NUMBER_OF_SEARCHING_HITS);
@@ -141,14 +137,14 @@ public class PypiPackageSearcher
         int totalHits = packageNames.size();
 
         if (hitsPerPage == 0 || offset >= totalHits) {
-            return new CollectionIterableResult<String>(totalHits, offset, Collections.<String>emptyList());
+            return new CollectionIterableResult<>(totalHits, offset, Collections.<String>emptyList());
         }
 
         int fromIndex = offset < 0 ? 0 : offset;
         int toId = offset + hitsPerPage > totalHits || hitsPerPage < 0 ? totalHits : offset + hitsPerPage;
 
         List<String> result = packageNames.subList(fromIndex, toId);
-        return new CollectionIterableResult<String>(totalHits, offset, result);
+        return new CollectionIterableResult<>(totalHits, offset, result);
     }
 
     private String obtainPackageName(int docId) throws IOException
