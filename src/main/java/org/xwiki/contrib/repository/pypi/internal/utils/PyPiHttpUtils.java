@@ -29,8 +29,6 @@ import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.protocol.HttpContext;
-import org.xwiki.extension.ExtensionNotFoundException;
-import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
 /**
@@ -40,7 +38,7 @@ import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 public class PyPiHttpUtils
 {
     public static InputStream performGet(URI uri, HttpClientFactory httpClientFactory, HttpContext localContext)
-            throws HttpException
+        throws HttpException
     {
         HttpGet getMethod = new HttpGet(uri);
         CloseableHttpClient httpClient = httpClientFactory.createClient(null, null);
@@ -60,14 +58,14 @@ public class PyPiHttpUtils
             try {
                 return response.getEntity().getContent();
             } catch (IOException e) {
-                throw new HttpException(String.format("Failed to parse response body of request [%s]",
-                        getMethod.getURI()), e);
+                throw new HttpException(
+                    String.format("Failed to parse response body of request [%s]", getMethod.getURI()), e);
             }
         } else if (statusCode == HttpStatus.SC_NOT_FOUND) {
             return null;
         } else {
             throw new HttpException(String.format("Invalid answer [%s] from the server when requesting [%s]",
-                    response.getStatusLine().getStatusCode(), getMethod.getURI()));
+                response.getStatusLine().getStatusCode(), getMethod.getURI()));
         }
     }
 }
