@@ -51,6 +51,10 @@ import org.xwiki.extension.repository.result.IterableResult;
  */
 public class PypiPackageSearcher
 {
+    private Directory indexDirectory;
+
+    private final IndexReader reader;
+
     private final IndexSearcher indexSearcher;
 
     private final StandardAnalyzer analyzer;
@@ -64,8 +68,8 @@ public class PypiPackageSearcher
         this.indexDirectoryFile = indexDirectoryFile;
         this.logger = logger;
 
-        Directory indexDirectory = FSDirectory.open(indexDirectoryFile.toPath());
-        IndexReader reader = DirectoryReader.open(indexDirectory);
+        indexDirectory = FSDirectory.open(indexDirectoryFile.toPath());
+        reader = DirectoryReader.open(indexDirectory);
         indexSearcher = new IndexSearcher(reader);
         analyzer = new StandardAnalyzer();
     }
@@ -155,5 +159,10 @@ public class PypiPackageSearcher
     public File getIndexDirectoryFile()
     {
         return indexDirectoryFile;
+    }
+
+    public IndexReader createIndexReader() throws IOException
+    {
+        return DirectoryReader.open(indexDirectory);
     }
 }

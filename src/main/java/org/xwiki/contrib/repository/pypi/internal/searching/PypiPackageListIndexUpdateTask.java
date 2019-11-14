@@ -28,6 +28,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.TimerTask;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import javax.xml.parsers.ParserConfigurationException;
@@ -96,12 +97,9 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     {
         logger.info("Start of update lucene index task");
         boolean newIndexCreated = false;
-        boolean isFirstUpdate = false;
-        File currentIndex = pypiPackageListIndexDirectory.get();
-        File indexDir = environment.getTemporaryDirectory();
-        if (currentIndex == null) {
-            isFirstUpdate = true;
-        }
+        File indexDir = new File(environment.getPermanentDirectory(), "cache/pypi-index");
+        indexDir = new File(indexDir, UUID.randomUUID().toString());
+
         IndexWriter indexWriter = null;
         Optional<InputStream> htmlPageInputStream = null;
         try {
