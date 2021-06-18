@@ -25,10 +25,10 @@ package org.xwiki.contrib.repository.pypi.internal;
  */
 public interface PypiParameters
 {
-    String API_URL = "https://pypi.python.org/pypi";
-    String PACKAGE_INFO_JSON = "https://pypi.python.org/pypi/{package_name}/json";
-    String PACKAGE_VERSION_INFO_JSON = "https://pypi.python.org/pypi/{package_name}/{version}/json";
-    String PACKAGE_LIST_SIMPLE_API = "https://pypi.python.org/simple/";
+    String API_URL = "https://pypi.org/pypi";
+    String PACKAGE_INFO_JSON = "https://pypi.org/pypi/{package_name}/json";
+    String PACKAGE_VERSION_INFO_JSON = "https://pypi.org/pypi/{package_name}/{version}/json";
+    String PACKAGE_LIST_SIMPLE_API = "https://pypi.org/simple/";
 
     String DEFAULT_GROUPID = "org.python";
     String PACKAGE_TYPE = "jar";
