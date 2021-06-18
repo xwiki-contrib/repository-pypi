@@ -22,9 +22,7 @@ package org.xwiki.contrib.repository.pypi.internal;
 import java.io.IOException;
 import java.io.InputStream;
 
-import org.apache.commons.beanutils.converters.ClassConverter;
 import org.apache.commons.io.IOUtils;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDtoTest;
 
 /**
  * Created by Krzysztof on 21.07.2017.

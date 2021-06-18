@@ -4,15 +4,10 @@ import java.util.Optional;
 
 import org.junit.Test;
 import org.xwiki.contrib.repository.pypi.internal.TestUtils;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**

@@ -1,9 +1,8 @@
 package org.xwiki.contrib.repository.pypi.internal.dto.packagesInJython;
 
 import org.junit.Test;
-import org.xwiki.contrib.repository.pypi.internal.dto.packagesInJython.PackagesInJython;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Created by Krzysztof on 25.07.2017.

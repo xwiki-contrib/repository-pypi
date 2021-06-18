@@ -9,10 +9,9 @@ import org.xwiki.contrib.repository.pypi.internal.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageInfoDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
-import org.xwiki.contrib.repository.pypi.internal.dto.wheelMetadata.RequiredDistributions;
 import org.xwiki.extension.ResolveException;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyString;
 import static org.mockito.Mockito.mock;
