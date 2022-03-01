@@ -24,19 +24,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.parsers.SAXParser;
-import javax.xml.parsers.SAXParserFactory;
+import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
@@ -48,10 +43,10 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.FSDirectory;
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Element;
+import org.jsoup.select.Elements;
 import org.slf4j.Logger;
-import org.xml.sax.Attributes;
-import org.xml.sax.SAXException;
-import org.xml.sax.helpers.DefaultHandler;
 import org.xwiki.contrib.repository.pypi.internal.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
 import org.xwiki.contrib.repository.pypi.internal.dto.packagesInJython.PackagesInJython;
@@ -100,25 +95,18 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         File indexDir = new File(environment.getPermanentDirectory(), "cache/pypi-index");
         indexDir = new File(indexDir, UUID.randomUUID().toString());
 
-        IndexWriter indexWriter = null;
-        Optional<InputStream> htmlPageInputStream = null;
-        try {
-            indexWriter =
-                new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()));
-            htmlPageInputStream = getSimpleApiHtmlPageInputStream();
-            if (htmlPageInputStream.isPresent()) {
-                List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream.get());
-                packageNames = removePackagesIncludedInJython(packageNames);
-                addAllValidPackagesToIndex(indexWriter, packageNames);
+        try (IndexWriter indexWriter =
+            new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()))) {
+            try (InputStream htmlPageInputStream = getSimpleApiHtmlPageInputStream()) {
+                if (htmlPageInputStream != null) {
+                    List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream);
+                    packageNames = removePackagesIncludedInJython(packageNames);
+                    addAllValidPackagesToIndex(indexWriter, packageNames);
+                }
+                newIndexCreated = true;
             }
-            newIndexCreated = true;
         } catch (IOException e) {
             logger.error("IO problem whilst updating python package index", e);
-        } catch (SAXException | ParserConfigurationException e) {
-            logger.error("Problem occured whilst parsing list of packages from PyPi", e);
-        } finally {
-            IOUtils.closeQuietly(indexWriter);
-            IOUtils.closeQuietly(htmlPageInputStream.orElse(null));
         }
         if (newIndexCreated) {
             File previousIndexDir = pypiPackageListIndexDirectory.get();
@@ -177,65 +165,26 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         return createNewDocument(packageName, version);
     }
 
-    protected List<String> parseHtmlPageToPackagenames(InputStream is)
-        throws ParserConfigurationException, SAXException, IOException
+    protected List<String> parseHtmlPageToPackagenames(InputStream is) throws IOException
     {
-        SAXParserFactory parserFactor = SAXParserFactory.newInstance();
-        SAXParser parser = parserFactor.newSAXParser();
-        PypiPackageListSAXHandler handler = new PypiPackageListSAXHandler();
-        parser.parse(is, handler);
-        return handler.getPackageNames();
+        org.jsoup.nodes.Document doc = Jsoup.parse(is, null, PypiParameters.PACKAGE_LIST_SIMPLE_API);
+
+        Elements links = doc.select("a");
+
+        return links.stream().map(Element::text).collect(Collectors.toList());
     }
 
-    public Optional<InputStream> getSimpleApiHtmlPageInputStream()
+    public InputStream getSimpleApiHtmlPageInputStream()
     {
         try {
-            return Optional.of(PyPiHttpUtils.performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API),
-                httpClientFactory, localContext));
+            return PyPiHttpUtils.performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API), httpClientFactory,
+                localContext);
         } catch (HttpException e) {
             logger.error("Failed to get list of python packages from PyPi", e);
         } catch (URISyntaxException e) {
             // should never happen
         }
-        return Optional.empty();
-    }
 
-    class PypiPackageListSAXHandler extends DefaultHandler
-    {
-        List<String> packageNames = new LinkedList<>();
-
-        private boolean aIsOpened = false;
-
-        @Override
-        public void startElement(String uri, String localName, String qName, Attributes attributes) throws SAXException
-        {
-            switch (qName) {
-                case "a":
-                    aIsOpened = true;
-            }
-        }
-
-        @Override
-        public void characters(char[] ch, int start, int length) throws SAXException
-        {
-            if (aIsOpened) {
-                String packageName = new String(ch, start, length);
-                packageNames.add(packageName);
-            }
-        }
-
-        @Override
-        public void endElement(String uri, String localName, String qName) throws SAXException
-        {
-            switch (qName) {
-                case "a":
-                    aIsOpened = false;
-            }
-        }
-
-        public List<String> getPackageNames()
-        {
-            return packageNames;
-        }
+        return null;
     }
 }
