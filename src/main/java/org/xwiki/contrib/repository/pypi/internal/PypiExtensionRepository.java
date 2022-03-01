@@ -180,7 +180,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             }
         }
 
-        // If no index can be found the the default embedded one
+        // If no index can be found use the default embedded one
         if (pypiPackageListIndexDirectory.get() == null) {
             try {
                 importIndex(getClass().getResourceAsStream("/luceneIndexOfValidPackages/pypi-index-20191114.zip"));

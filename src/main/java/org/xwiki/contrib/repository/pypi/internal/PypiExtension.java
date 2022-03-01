@@ -29,7 +29,6 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
@@ -52,8 +51,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
 
     private String pythonDistributionType;
 
-    private PypiExtension(ExtensionRepository repository,
-            ExtensionId id, String type)
+    private PypiExtension(ExtensionRepository repository, ExtensionId id, String type)
     {
         super(repository, id, type);
     }
@@ -67,23 +65,22 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
      * @throws ResolveException -
      */
     public static PypiExtension constructFrom(PypiPackageJSONDto pypiPackageData,
-            PypiExtensionRepository pypiExtensionRepository, ExtensionLicenseManager licenseManager,
-            HttpClientFactory httpClientFactory) throws ResolveException
+        PypiExtensionRepository pypiExtensionRepository, ExtensionLicenseManager licenseManager,
+        HttpClientFactory httpClientFactory) throws ResolveException
     {
         String packageName = pypiPackageData.getInfo().getName();
         String version = pypiPackageData.getInfo().getVersion();
         ExtensionId extensionId = new ExtensionId(PypiParameters.DEFAULT_GROUPID + ":" + packageName, version);
-        Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional =
-                pypiPackageData.getWhlFileUrlDtoForVersion(version);
+        Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional = pypiPackageData.getWhlFileUrlDtoForVersion(version);
         if (!fileUrlDtoForVersionOptional.isPresent()) {
             throw new ResolveException("Compatible distribution of  [" + packageName
-                    + "] not found in PyPi repository (required compatibility with Jython 2.7)");
+                + "] not found in PyPi repository (required compatibility with Jython 2.7)");
         }
         PypiPackageUrlDto fileUrlDtoForVersion = fileUrlDtoForVersionOptional.get();
         PypiExtension pypiExtension =
-                new PypiExtension(pypiExtensionRepository, extensionId, PypiParameters.PACKAGE_TYPE);
+            new PypiExtension(pypiExtensionRepository, extensionId, PypiParameters.PACKAGE_TYPE);
 
-        //set metadata
+        // set metadata
         pypiExtension.setName(pypiPackageData.getInfo().getName());
         pypiExtension.setDescription(pypiPackageData.getInfo().getDescription());
         pypiExtension.setSummary(StringUtils.substring(pypiPackageData.getInfo().getDescription(), 0, 200));
@@ -93,7 +90,7 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         pypiExtension.setRecommended(false);
 
         pypiExtension.setPythonDistributionType(fileUrlDtoForVersion.getPackagetype());
-        //setFile
+        // setFile
         try {
             URI uriToDownload = new URI(fileUrlDtoForVersion.getUrl());
             long size = fileUrlDtoForVersion.getSize();
@@ -109,27 +106,23 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
 
     private void addDependencies(PypiExtensionRepository pypiExtensionRepository) throws ResolveException
     {
-        ZipInputStream zis = null;
         if (PypiParameters.PACKAGE_TYPE_WHEEL.equals(getPythonDistributionType())) {
-            try {
-                zis = new ZipInputStream(getFile().openStream());
+            try (ZipInputStream zis = new ZipInputStream(getFile().openStream())) {
                 for (ZipEntry entry = zis.getNextEntry(); entry != null; entry = zis.getNextEntry()) {
                     String fileName = entry.getName();
                     if (metadataFilename.matcher(fileName).matches()) {
                         RequiredDistributions.resolveDependenciesFromFile(zis, pypiExtensionRepository)
-                                .getDependencies().stream().forEach(dependency -> addDependency(dependency));
+                            .getDependencies().stream().forEach(dependency -> addDependency(dependency));
                         break;
                     }
                 }
             } catch (IOException e) {
                 throw new ResolveException(
-                        "Cannot open distribution package for obtaining dependencies. Package name: " + getName());
-            } finally {
-                IOUtils.closeQuietly(zis);
+                    "Cannot open distribution package for obtaining dependencies. Package name: " + getName());
             }
         } else {
             throw new ResolveException(
-                    "Not supported package type: " + getPythonDistributionType() + ". Package name: " + getName());
+                "Not supported package type: " + getPythonDistributionType() + ". Package name: " + getName());
         }
     }
 

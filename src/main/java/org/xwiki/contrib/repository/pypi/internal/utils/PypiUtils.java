@@ -21,6 +21,7 @@ package org.xwiki.contrib.repository.pypi.internal.utils;
 
 import java.util.Optional;
 
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
@@ -28,8 +29,6 @@ import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.ResolveException;
 import org.xwiki.extension.version.internal.DefaultVersion;
-
-import static org.apache.commons.lang.StringUtils.isEmpty;
 
 /**
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
@@ -82,7 +81,7 @@ final public class PypiUtils
     public static Optional<String> getVersion(ExtensionId extensionId)
     {
         String version = extensionId.getVersion().getValue();
-        if (isEmpty(version)) {
+        if (StringUtils.isEmpty(version)) {
             return Optional.empty();
         } else {
             return Optional.of(version);
