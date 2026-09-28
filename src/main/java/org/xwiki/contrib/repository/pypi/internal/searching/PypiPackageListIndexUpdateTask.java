@@ -19,32 +19,18 @@
  */
 package org.xwiki.contrib.repository.pypi.internal.searching;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.TimerTask;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.store.FSDirectory;
 import org.slf4j.Logger;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
 import org.xwiki.contrib.repository.pypi.internal.utils.PyPiHttpUtils;
-import org.xwiki.environment.Environment;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
 import com.fasterxml.jackson.core.JsonFactory;
@@ -63,19 +49,15 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
 
     private final HttpClientContext localContext;
 
-    private AtomicReference<File> pypiPackageListIndexDirectory;
+    private final PypiPackageIndex index;
 
-    private Environment environment;
+    private final HttpClientFactory httpClientFactory;
 
-    private HttpClientFactory httpClientFactory;
+    private final Logger logger;
 
-    private Logger logger;
-
-    public PypiPackageListIndexUpdateTask(AtomicReference<File> pypiPackageListIndexDirectory,
-        Environment environment, HttpClientFactory httpClientFactory, Logger logger)
+    public PypiPackageListIndexUpdateTask(PypiPackageIndex index, HttpClientFactory httpClientFactory, Logger logger)
     {
-        this.pypiPackageListIndexDirectory = pypiPackageListIndexDirectory;
-        this.environment = environment;
+        this.index = index;
         this.httpClientFactory = httpClientFactory;
         this.localContext = HttpClientContext.create();
         this.logger = logger;
@@ -84,58 +66,23 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     @Override
     public void run()
     {
-        logger.info("Start of update lucene index task");
-        boolean newIndexCreated = false;
-        File indexDir = new File(environment.getPermanentDirectory(), "cache/pypi-index");
-        indexDir = new File(indexDir, UUID.randomUUID().toString());
+        logger.info("Start of update PyPI package index task");
 
+        boolean updated = false;
         try (InputStream simpleIndexInputStream = getSimpleApiIndexInputStream()) {
+            // Keep the current index when the list of packages can't be downloaded
             if (simpleIndexInputStream != null) {
-                try (IndexWriter indexWriter = new IndexWriter(FSDirectory.open(indexDir.toPath()),
-                    new IndexWriterConfig(new StandardAnalyzer()))) {
-                    parsePackageNames(simpleIndexInputStream, packageName -> addPackage(indexWriter, packageName));
-                }
-                newIndexCreated = true;
+                updated = this.index.update(consumer -> parsePackageNames(simpleIndexInputStream, consumer));
             }
-        } catch (IOException | UncheckedIOException e) {
+        } catch (IOException e) {
             logger.error("IO problem whilst updating python package index", e);
         }
-        if (newIndexCreated) {
-            File previousIndexDir = pypiPackageListIndexDirectory.get();
-            pypiPackageListIndexDirectory.set(indexDir);
-            try {
-                if (previousIndexDir != null) {
-                    FileUtils.forceDelete(previousIndexDir);
-                }
-            } catch (Exception e) {
-                logger.warn("Failed to delete previous index [{}]", previousIndexDir, e);
-            }
-            logger.info("End of update lucene index task. Pypi packages list index updated");
+
+        if (updated) {
+            logger.info("End of update PyPI package index task. PyPI packages index updated");
         } else {
-            logger.info("End of update lucene index task. Pypi packages list update called but index not updated");
+            logger.info("End of update PyPI package index task. PyPI packages index not updated");
         }
-    }
-
-    private void addPackage(IndexWriter indexWriter, String packageName)
-    {
-        try {
-            indexWriter.addDocument(createNewDocument(packageName));
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    /**
-     * @param packageName the name of the package
-     * @return the Lucene document indexing the package
-     * @since 1.1.5
-     */
-    public static Document createNewDocument(String packageName)
-    {
-        Document document = new Document();
-        document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
-        document.add(new StringField(LuceneParameters.ID, packageName, Field.Store.YES));
-        return document;
     }
 
     /**

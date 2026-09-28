@@ -25,11 +25,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -38,8 +37,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Timer;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -48,16 +45,9 @@ import java.util.zip.ZipOutputStream;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.store.FSDirectory;
 import org.slf4j.Logger;
 import org.xwiki.component.annotation.Component;
 import org.xwiki.component.manager.ComponentLifecycleException;
@@ -66,7 +56,7 @@ import org.xwiki.component.phase.Initializable;
 import org.xwiki.component.phase.InitializationException;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiSimpleProjectDto;
-import org.xwiki.contrib.repository.pypi.internal.searching.LuceneParameters;
+import org.xwiki.contrib.repository.pypi.internal.searching.PypiPackageIndex;
 import org.xwiki.contrib.repository.pypi.internal.searching.PypiPackageListIndexUpdateTask;
 import org.xwiki.contrib.repository.pypi.internal.searching.PypiPackageSearcher;
 import org.xwiki.contrib.repository.pypi.internal.utils.PyPiHttpUtils;
@@ -99,6 +89,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class PypiExtensionRepository extends AbstractExtensionRepository
     implements Searchable, Initializable, Disposable
 {
+    private static final String EMBEDDED_INDEX = "/pypiIndex/pypi-index-20260928.zip";
+
+    private static final String INDEX_ENTRY = "index.txt";
+
     private static ObjectMapper objectMapper = new ObjectMapper();
 
     @Inject
@@ -117,9 +111,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
 
     private Timer timer;
 
-    private AtomicReference<File> pypiPackageListIndexDirectory = null;
-
-    private PypiPackageSearcher packageSearcher;
+    private PypiPackageIndex packageIndex;
 
     /**
      * @param extensionRepositoryDescriptor -
@@ -135,10 +127,10 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     @Override
     public void initialize() throws InitializationException
     {
-        initializePackageListIndexDirectory();
+        initializePackageIndex();
         timer = new Timer();
-        PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask = new PypiPackageListIndexUpdateTask(
-            pypiPackageListIndexDirectory, environment, httpClientFactory, logger);
+        PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask =
+            new PypiPackageListIndexUpdateTask(this.packageIndex, httpClientFactory, logger);
 
         // TODO: make the period configurable
         long period = 1000L * 60L * 60L * 12L;
@@ -146,44 +138,22 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         timer.schedule(pypiPackageListIndexUpdateTask, 0, period);
     }
 
-    private void initializePackageListIndexDirectory() throws InitializationException
+    private void initializePackageIndex() throws InitializationException
     {
-        File indexParent = new File(environment.getPermanentDirectory(), "cache/pypi-index");
-
-        pypiPackageListIndexDirectory = new AtomicReference<>();
-
-        // Find the most recent index
-        if (indexParent.exists()) {
-            for (File child : indexParent.listFiles()) {
-                if (child.isDirectory() && (pypiPackageListIndexDirectory.get() == null
-                    || child.lastModified() > pypiPackageListIndexDirectory.get().lastModified())) {
-                    // Remember current valid index
-                    File currentDirectory = pypiPackageListIndexDirectory.get();
-
-                    // Check new index
-                    pypiPackageListIndexDirectory.set(child);
-                    if (getPypiPackageSearcher() == null) {
-                        logger.info("Deleting bad index [{}]", pypiPackageListIndexDirectory.get());
-
-                        try {
-                            FileUtils.forceDelete(pypiPackageListIndexDirectory.get());
-                        } catch (IOException e) {
-                            logger.error("Failed to delete index [{}]", pypiPackageListIndexDirectory.get());
-                        }
-
-                        // Put back previous valid index
-                        pypiPackageListIndexDirectory.set(currentDirectory);
-                    }
-                }
-            }
-        }
+        this.packageIndex =
+            new PypiPackageIndex(new File(environment.getPermanentDirectory(), "cache/pypi-index"), logger);
+        this.packageIndex.initialize();
 
         // If no index can be found use the default embedded one
-        if (pypiPackageListIndexDirectory.get() == null) {
-            try {
-                importIndex(getClass().getResourceAsStream("/luceneIndexOfValidPackages/pypi-index-20260928.zip"));
-            } catch (Exception e) {
-                throw new InitializationException("Could not copy lucene index to local directory", e);
+        if (this.packageIndex.getFile() == null) {
+            try (InputStream stream = getClass().getResourceAsStream(EMBEDDED_INDEX)) {
+                importIndex(stream);
+            } catch (IOException e) {
+                throw new InitializationException("Could not read the embedded PyPI package index", e);
+            }
+
+            if (this.packageIndex.getFile() == null) {
+                throw new InitializationException("Could not copy the embedded PyPI package index");
             }
         }
     }
@@ -327,13 +297,13 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     public IterableResult<Extension> search(String searchQuery, int offset, int hitsPerPage) throws SearchException
     {
         try {
-            PypiPackageSearcher searcher = getPypiPackageSearcher();
+            PypiPackageSearcher searcher = this.packageIndex.getSearcher();
             if (searcher != null) {
                 IterableResult<String> packageNames = searcher.search(searchQuery, offset, hitsPerPage);
                 return toExtensions(packageNames);
             }
-        } catch (Exception e) {
-            logger.error("Lucene index searcher search exception", e);
+        } catch (IOException e) {
+            throw new SearchException("Failed to search the PyPI package index", e);
         }
         return new CollectionIterableResult<>(0, 0, Collections.emptyList());
     }
@@ -346,30 +316,11 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 PypiExtension pythonPackageExtension = getPythonPackageExtension(packageName, Optional.empty());
                 extensions.add(pythonPackageExtension);
             } catch (ResolveException e) {
-                logger.debug("Could nor resolve extension that is present in lucene index: " + packageName, e);
+                logger.debug("Could not resolve extension that is present in the index: " + packageName, e);
             }
         });
 
         return new CollectionIterableResult<>(packageNames.getTotalHits(), packageNames.getOffset(), extensions);
-    }
-
-    private PypiPackageSearcher getPypiPackageSearcher()
-    {
-        if (packageSearcher == null || hasPackageListIndexChanged()) {
-            try {
-                packageSearcher = new PypiPackageSearcher(pypiPackageListIndexDirectory.get(), logger);
-            } catch (IOException e) {
-                logger.error(
-                    "Could not open lucene package list index from directory " + pypiPackageListIndexDirectory.get(),
-                    e);
-            }
-        }
-        return packageSearcher;
-    }
-
-    private boolean hasPackageListIndexChanged()
-    {
-        return !packageSearcher.getIndexDirectoryFile().equals(pypiPackageListIndexDirectory.get());
     }
 
     private String getIndexFileName()
@@ -394,69 +345,38 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
             outputFile = new File(outputFile, getIndexFileName());
         }
 
-        PypiPackageSearcher searcher = getPypiPackageSearcher();
-        if (searcher != null) {
-            try (IndexReader reader = searcher.createIndexReader()) {
-                try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(outputFile))) {
-                    zip.putNextEntry(new ZipEntry("index.txt"));
-
-                    // Don't close the writer since it would close the zip stream before the entry is closed
-                    Writer writer = new OutputStreamWriter(zip, StandardCharsets.UTF_8);
-                    for (int i = 0; i < reader.maxDoc(); i++) {
-                        Document doc = reader.document(i);
-
-                        writer.append(doc.get(LuceneParameters.PACKAGE_NAME));
-                        writer.append('\n');
-                    }
-                    writer.flush();
-
-                    zip.closeEntry();
-                }
+        File indexFile = this.packageIndex.getFile();
+        if (indexFile != null) {
+            try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(outputFile))) {
+                zip.putNextEntry(new ZipEntry(INDEX_ENTRY));
+                Files.copy(indexFile.toPath(), zip);
+                zip.closeEntry();
             }
         }
     }
 
+    /**
+     * Replace the current index with the one contained in the provided zip. Each line of the index contains a package
+     * name, possibly followed by a tab and the version of the package in indexes exported by older versions.
+     *
+     * @param inputFile the zip containing the index
+     */
     public void importIndex(InputStream inputFile)
     {
-        boolean newIndexCreated = false;
-        File indexDir = new File(environment.getPermanentDirectory(), "cache/pypi-index");
-        indexDir = new File(indexDir, UUID.randomUUID().toString());
-
-        try (IndexWriter indexWriter =
-            new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()))) {
-
-            try (ZipInputStream zip = new ZipInputStream(inputFile)) {
-                zip.getNextEntry();
-
-                try (BufferedReader reader =
-                    new BufferedReader(new InputStreamReader(zip, StandardCharsets.UTF_8))) {
-                    for (String line = reader.readLine(); line != null; line = reader.readLine()) {
-                        // Older indexes also contain the version of the package after a tab
-                        String packageName = StringUtils.substringBefore(line, "\t");
-
-                        if (!packageName.isEmpty()) {
-                            indexWriter.addDocument(PypiPackageListIndexUpdateTask.createNewDocument(packageName));
-                        }
-                    }
-                }
+        this.packageIndex.update(consumer -> {
+            ZipInputStream zip = new ZipInputStream(inputFile);
+            if (zip.getNextEntry() == null) {
+                throw new IOException("The index zip is empty");
             }
 
-            newIndexCreated = true;
-        } catch (IOException e) {
-            logger.error("IO problem when creating the Lucene index writer", e);
-        }
+            BufferedReader reader = new BufferedReader(new InputStreamReader(zip, StandardCharsets.UTF_8));
+            for (String line = reader.readLine(); line != null; line = reader.readLine()) {
+                String packageName = StringUtils.substringBefore(line, "\t");
 
-        if (newIndexCreated) {
-            File previousIndexDir = pypiPackageListIndexDirectory.get();
-            pypiPackageListIndexDirectory.set(indexDir);
-
-            if (previousIndexDir != null) {
-                try {
-                    FileUtils.forceDelete(previousIndexDir);
-                } catch (IOException e) {
-                    logger.error("Failed to delete previous index [{}]", e);
+                if (!packageName.isEmpty()) {
+                    consumer.accept(packageName);
                 }
             }
-        }
+        });
     }
 }

@@ -51,6 +51,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.environment.Environment;
+import org.xwiki.extension.Extension;
 import org.xwiki.extension.ExtensionManagerConfiguration;
 import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
@@ -249,9 +250,11 @@ public class PypiExtensionRepositoryTest
         this.responses.put("https://pypi.org/pypi/decorator/json", TestUtils
             .getFileAsString("/org/xwiki/contrib/repository/pypi/internal/dto/pypiJsonApi/PyplotPypiPackage.json",
                 this));
-        // The package (and the others containing its name) is found in the index but can't be resolved since it has
-        // no compatible distribution
-        assertEquals(0, repository.search("decorator", 0, -1).getSize());
-        assertTrue(getRequestedJsonApiUris().contains("https://pypi.org/pypi/decorator/json"));
+        // The package is found first in the index (with the others containing its name) but can't be resolved since
+        // it has no compatible distribution
+        IterableResult<Extension> result = repository.search("decorator", 0, 1);
+        assertEquals(0, result.getSize());
+        assertTrue(result.getTotalHits() > 1);
+        assertEquals(Arrays.asList("https://pypi.org/pypi/decorator/json"), getRequestedJsonApiUris());
     }
 }

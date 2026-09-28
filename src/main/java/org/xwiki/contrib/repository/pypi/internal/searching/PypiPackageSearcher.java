@@ -19,145 +19,91 @@
  */
 package org.xwiki.contrib.repository.pypi.internal.searching;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.stream.Collectors;
+import java.util.Locale;
 
-import org.apache.lucene.analysis.standard.StandardAnalyzer;
-import org.apache.lucene.document.Document;
-import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.index.Term;
-import org.apache.lucene.queryparser.classic.ParseException;
-import org.apache.lucene.queryparser.classic.QueryParser;
-import org.apache.lucene.search.IndexSearcher;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.RegexpQuery;
-import org.apache.lucene.search.TopDocs;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.slf4j.Logger;
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.extension.repository.result.CollectionIterableResult;
 import org.xwiki.extension.repository.result.IterableResult;
 
 /**
+ * Search the package names of a {@link PypiPackageIndex} file.
+ *
  * @since 1.0
  * @version $Id$
  */
 public class PypiPackageSearcher
 {
-    private Directory indexDirectory;
+    private final File indexFile;
 
-    private final IndexReader reader;
-
-    private final IndexSearcher indexSearcher;
-
-    private final StandardAnalyzer analyzer;
-
-    private File indexDirectoryFile;
-
-    private final Logger logger;
-
-    public PypiPackageSearcher(File indexDirectoryFile, Logger logger) throws IOException
+    /**
+     * @param indexFile the index file, containing one package name per line
+     */
+    public PypiPackageSearcher(File indexFile)
     {
-        this.indexDirectoryFile = indexDirectoryFile;
-        this.logger = logger;
-
-        indexDirectory = FSDirectory.open(indexDirectoryFile.toPath());
-        reader = DirectoryReader.open(indexDirectory);
-        indexSearcher = new IndexSearcher(reader);
-        analyzer = new StandardAnalyzer();
+        this.indexFile = indexFile;
     }
 
-    public Optional<Document> searchOneAndGetItsDocument(String packageName)
+    /**
+     * @return the index file
+     */
+    public File getIndexFile()
     {
-        Optional<Integer> documentId = searchOneAndGetItsDocumentId(packageName);
-        if (documentId.isPresent()) {
-            try {
-                return Optional.of(indexSearcher.doc(documentId.get()));
-            } catch (IOException e) {
-                logger.error("Could not get document of id: " + documentId.get());
-            }
-        }
-
-        return Optional.empty();
+        return this.indexFile;
     }
 
-    public Optional<String> searchOneAndGetField(String packageName, String field)
-    {
-        Optional<Integer> id = searchOneAndGetItsDocumentId(packageName);
-        if (id.isPresent()) {
-            try {
-                return Optional.of(indexSearcher.doc(id.get()).get(field));
-            } catch (IOException e) {
-                logger.error("Could not get document of id: " + id.get());
-            }
-        }
-
-        return Optional.empty();
-    }
-
-    public Optional<Integer> searchOneAndGetItsDocumentId(String packageName)
-    {
-        Query q = null;
-        try {
-            q = new QueryParser(LuceneParameters.ID, analyzer).parse(packageName);
-            TopDocs hits = indexSearcher.search(q, 1);
-            if (hits.totalHits == 1) {
-                return Optional.of(hits.scoreDocs[0].doc);
-            }
-        } catch (ParseException e) {
-            logger.debug("Could not parse query resolving package: " + packageName, e);
-        } catch (IOException e) {
-            logger.debug("Could not perform searching in lucene index for package: " + packageName, e);
-        }
-
-        return Optional.empty();
-    }
-
+    /**
+     * Find the packages whose name contains the query, ignoring the case. The package with exactly the searched name
+     * comes first, the others follow in the order of the index.
+     *
+     * @param searchQuery the text to search in the package names, all packages are matched when empty
+     * @param offset the index of the first package to return
+     * @param hitsPerPage the maximum number of packages to return, or a negative value to return all of them
+     * @return the names of the packages found
+     * @throws IOException when failing to read the index
+     */
     public IterableResult<String> search(String searchQuery, int offset, int hitsPerPage) throws IOException
     {
-        Query q = new RegexpQuery(new Term(LuceneParameters.PACKAGE_NAME, ".*" + searchQuery + ".*"));
-        TopDocs hits = indexSearcher.search(q, LuceneParameters.MAX_NUMBER_OF_SEARCHING_HITS);
+        String query = StringUtils.defaultString(searchQuery).trim().toLowerCase(Locale.ROOT);
+        int from = Math.max(offset, 0);
+        // Only the packages up to the end of the requested page need to be remembered
+        long max = hitsPerPage < 0 ? Integer.MAX_VALUE : Math.min((long) from + hitsPerPage, Integer.MAX_VALUE);
 
-        List<String> packageNames = Arrays.stream(hits.scoreDocs).map(scoreDoc -> {
-            try {
-                return obtainPackageName(scoreDoc.doc);
-            } catch (IOException e) {
+        int totalHits = 0;
+        String exactMatch = null;
+        List<String> matches = new ArrayList<>();
+        try (BufferedReader reader = Files.newBufferedReader(this.indexFile.toPath(), StandardCharsets.UTF_8)) {
+            for (String packageName = reader.readLine(); packageName != null; packageName = reader.readLine()) {
+                String lowerPackageName = packageName.toLowerCase(Locale.ROOT);
+                if (lowerPackageName.contains(query)) {
+                    ++totalHits;
+                    if (exactMatch == null && lowerPackageName.equals(query)) {
+                        exactMatch = packageName;
+                    } else if (matches.size() < max) {
+                        matches.add(packageName);
+                    }
+                }
             }
-            return null;
-        }).filter(Objects::nonNull).distinct().collect(Collectors.toList());
-
-        int totalHits = packageNames.size();
-
-        if (hitsPerPage == 0 || offset >= totalHits) {
-            return new CollectionIterableResult<>(totalHits, offset, Collections.<String>emptyList());
         }
 
-        int fromIndex = offset < 0 ? 0 : offset;
-        int toId = offset + hitsPerPage > totalHits || hitsPerPage < 0 ? totalHits : offset + hitsPerPage;
+        if (exactMatch != null) {
+            matches.add(0, exactMatch);
+        }
 
-        List<String> result = packageNames.subList(fromIndex, toId);
+        List<String> result;
+        if (from >= matches.size() || max <= from) {
+            result = Collections.emptyList();
+        } else {
+            result = matches.subList(from, (int) Math.min(matches.size(), max));
+        }
+
         return new CollectionIterableResult<>(totalHits, offset, result);
-    }
-
-    private String obtainPackageName(int docId) throws IOException
-    {
-        return indexSearcher.doc(docId).get(LuceneParameters.PACKAGE_NAME);
-    }
-
-    public File getIndexDirectoryFile()
-    {
-        return indexDirectoryFile;
-    }
-
-    public IndexReader createIndexReader() throws IOException
-    {
-        return DirectoryReader.open(indexDirectory);
     }
 }

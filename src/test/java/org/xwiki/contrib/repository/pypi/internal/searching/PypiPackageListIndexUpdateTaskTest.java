@@ -4,11 +4,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpEntity;
@@ -24,10 +23,10 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.Logger;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
-import org.xwiki.environment.Environment;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,7 +44,7 @@ public class PypiPackageListIndexUpdateTaskTest
 {
     private File permanentDirectory;
 
-    private AtomicReference<File> indexDirectory = new AtomicReference<>();
+    private PypiPackageIndex index;
 
     private CloseableHttpClient httpClient = mock(CloseableHttpClient.class);
 
@@ -59,9 +58,7 @@ public class PypiPackageListIndexUpdateTaskTest
     public void before() throws Exception
     {
         this.permanentDirectory = new File("target/test-" + System.nanoTime()).getAbsoluteFile();
-
-        Environment environment = mock(Environment.class);
-        when(environment.getPermanentDirectory()).thenReturn(this.permanentDirectory);
+        this.index = new PypiPackageIndex(this.permanentDirectory, mock(Logger.class));
 
         CloseableHttpResponse response = mock(CloseableHttpResponse.class);
         when(response.getStatusLine()).thenReturn(this.statusLine);
@@ -70,8 +67,7 @@ public class PypiPackageListIndexUpdateTaskTest
         HttpClientFactory httpClientFactory = mock(HttpClientFactory.class);
         when(httpClientFactory.createClient(isNull(), isNull())).thenReturn(this.httpClient);
 
-        this.task = new PypiPackageListIndexUpdateTask(this.indexDirectory, environment, httpClientFactory,
-            mock(Logger.class));
+        this.task = new PypiPackageListIndexUpdateTask(this.index, httpClientFactory, mock(Logger.class));
     }
 
     private List<String> parsePackageNames(InputStream stream) throws IOException
@@ -121,9 +117,8 @@ public class PypiPackageListIndexUpdateTaskTest
     @Test
     public void run() throws Exception
     {
-        File previousIndex = new File(this.permanentDirectory, "previous");
-        previousIndex.mkdirs();
-        this.indexDirectory.set(previousIndex);
+        this.index.update(consumer -> consumer.accept("previous"));
+        File previousIndex = this.index.getFile();
 
         when(this.statusLine.getStatusCode()).thenReturn(HttpStatus.SC_OK);
         when(this.entity.getContent()).thenReturn(getClass().getResourceAsStream("SimpleIndex.json"));
@@ -136,29 +131,41 @@ public class PypiPackageListIndexUpdateTaskTest
         assertEquals(PypiParameters.SIMPLE_API_JSON_MEDIA_TYPE,
             request.getValue().getFirstHeader(HttpHeaders.ACCEPT).getValue());
 
-        assertNotEquals(previousIndex, this.indexDirectory.get());
-        assertTrue(!previousIndex.exists());
-
-        PypiPackageSearcher searcher = new PypiPackageSearcher(this.indexDirectory.get(), mock(Logger.class));
-        assertEquals(7, searcher.search("", 0, -1).getTotalHits());
-        List<String> result = new ArrayList<>();
-        searcher.search("decorator", 0, -1).forEach(result::add);
-        assertEquals(Collections.singletonList("decorator"), result);
+        assertNotEquals(previousIndex, this.index.getFile());
+        assertFalse(previousIndex.exists());
+        assertEquals(
+            Arrays.asList("0", "0-._.-._.-._.-._.-._.-._.-0", "000", "decorator", "networkx", "numpy", "requests"),
+            Files.readAllLines(this.index.getFile().toPath()));
     }
 
     @Test
     public void runWhenIndexIsNotAvailable() throws Exception
     {
-        File previousIndex = new File(this.permanentDirectory, "previous");
-        previousIndex.mkdirs();
-        this.indexDirectory.set(previousIndex);
+        this.index.update(consumer -> consumer.accept("previous"));
+        File previousIndex = this.index.getFile();
 
         when(this.statusLine.getStatusCode()).thenReturn(HttpStatus.SC_NOT_FOUND);
 
         this.task.run();
 
         // Keep the current index instead of replacing it with an empty one
-        assertEquals(previousIndex, this.indexDirectory.get());
+        assertEquals(previousIndex, this.index.getFile());
         assertTrue(previousIndex.exists());
+    }
+
+    @Test
+    public void runWhenIndexIsInvalid() throws Exception
+    {
+        this.index.update(consumer -> consumer.accept("previous"));
+        File previousIndex = this.index.getFile();
+
+        when(this.statusLine.getStatusCode()).thenReturn(HttpStatus.SC_OK);
+        when(this.entity.getContent()).thenReturn(IOUtils.toInputStream("<html>", StandardCharsets.UTF_8));
+
+        this.task.run();
+
+        assertEquals(previousIndex, this.index.getFile());
+        assertEquals(Arrays.asList("previous"), Files.readAllLines(previousIndex.toPath()));
+        assertEquals(1, this.permanentDirectory.list().length);
     }
 }
