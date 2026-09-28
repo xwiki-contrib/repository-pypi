@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.net.URI;
 
 import org.apache.http.HttpException;
+import org.apache.http.HttpHeaders;
 import org.apache.http.HttpStatus;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -40,7 +41,25 @@ public class PyPiHttpUtils
     public static InputStream performGet(URI uri, HttpClientFactory httpClientFactory, HttpContext localContext)
         throws HttpException
     {
+        return performGet(uri, null, httpClientFactory, localContext);
+    }
+
+    /**
+     * @param uri the URI to request
+     * @param accept the media type to ask for in the {@code Accept} header, or {@code null} to not send any
+     * @param httpClientFactory the factory used to create the HTTP client
+     * @param localContext the HTTP context to use, or {@code null}
+     * @return the body of the response, or {@code null} if the resource does not exist
+     * @throws HttpException when failing to request the URI
+     * @since 1.1.5
+     */
+    public static InputStream performGet(URI uri, String accept, HttpClientFactory httpClientFactory,
+        HttpContext localContext) throws HttpException
+    {
         HttpGet getMethod = new HttpGet(uri);
+        if (accept != null) {
+            getMethod.setHeader(HttpHeaders.ACCEPT, accept);
+        }
         CloseableHttpClient httpClient = httpClientFactory.createClient(null, null);
         CloseableHttpResponse response;
         try {

@@ -22,7 +22,6 @@ package org.xwiki.contrib.repository.pypi.internal.searching;
 public interface LuceneParameters
 {
     String PACKAGE_NAME = "packageName";
-    String VERSION = "version";
     String EXTENSION = "extension";
     String ID = "id";
     int MAX_NUMBER_OF_SEARCHING_HITS = 1000;

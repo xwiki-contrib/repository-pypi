@@ -20,6 +20,7 @@
 package org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi;
 
 import java.util.List;
+import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -53,6 +54,9 @@ public class PypiPackageInfoDto
     private String name;
     private String bugtrack_url;
     private String license;
+    private String license_expression;
+    private Map<String, String> project_urls;
+    private String project_url;
     private String summary;
     private String home_page;
     private String cheesecake_installability_id;
@@ -315,5 +319,35 @@ public class PypiPackageInfoDto
     public void setRequires_dist(List<String> requires_dist)
     {
         this.requires_dist = requires_dist;
+    }
+
+    public String getLicense_expression()
+    {
+        return license_expression;
+    }
+
+    public void setLicense_expression(String license_expression)
+    {
+        this.license_expression = license_expression;
+    }
+
+    public Map<String, String> getProject_urls()
+    {
+        return project_urls;
+    }
+
+    public void setProject_urls(Map<String, String> project_urls)
+    {
+        this.project_urls = project_urls;
+    }
+
+    public String getProject_url()
+    {
+        return project_url;
+    }
+
+    public void setProject_url(String project_url)
+    {
+        this.project_url = project_url;
     }
 }

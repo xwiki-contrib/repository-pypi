@@ -29,6 +29,14 @@ public interface PypiParameters
     String PACKAGE_INFO_JSON = "https://pypi.org/pypi/{package_name}/json";
     String PACKAGE_VERSION_INFO_JSON = "https://pypi.org/pypi/{package_name}/{version}/json";
     String PACKAGE_LIST_SIMPLE_API = "https://pypi.org/simple/";
+    String PACKAGE_SIMPLE_API = "https://pypi.org/simple/{package_name}/";
+
+    /**
+     * The media type to ask the Simple API for its JSON form (PEP 691) instead of the default HTML one.
+     *
+     * @since 1.1.5
+     */
+    String SIMPLE_API_JSON_MEDIA_TYPE = "application/vnd.pypi.simple.v1+json";
 
     String DEFAULT_GROUPID = "org.python";
     String PACKAGE_TYPE = "jar";

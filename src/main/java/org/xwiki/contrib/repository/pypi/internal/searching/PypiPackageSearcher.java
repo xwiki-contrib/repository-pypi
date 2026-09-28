@@ -88,11 +88,6 @@ public class PypiPackageSearcher
         return Optional.empty();
     }
 
-    public Optional<String> searchOneAndGetItsVersion(String packageName)
-    {
-        return searchOneAndGetField(packageName, LuceneParameters.VERSION);
-    }
-
     public Optional<String> searchOneAndGetField(String packageName, String field)
     {
         Optional<Integer> id = searchOneAndGetItsDocumentId(packageName);

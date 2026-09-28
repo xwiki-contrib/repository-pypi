@@ -20,160 +20,75 @@
 package org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
-import java.util.stream.Collectors;
 
-import org.apache.commons.collections4.IteratorUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
-import org.xwiki.contrib.repository.pypi.internal.exception.PypiApiException;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.collect.Sets;
 
 /**
+ * The response of the PyPI JSON API ({@code https://pypi.org/pypi/<project>[/<version>]/json}).
+ * <p>
+ * The distribution files are taken from {@code urls}, which lists the files of the release described in
+ * {@code info}: the requested version, or the latest one when no version is requested. The {@code releases} field
+ * is not used since it's deprecated and not returned anymore when requesting a specific version.
+ *
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PypiPackageJSONDto
 {
-    private PypiPackageInfoDto info;
+    private static final String WHEEL_EXTENSION = ".whl";
 
-    private JsonNode releases;
+    private PypiPackageInfoDto info;
 
     private List<PypiPackageUrlDto> urls;
 
     /**
-     * Gets Url metadata for the latest version of package
-     * @return -
-     * @throws PypiApiException - when there's no downloadable version of this package
+     * Find a pure Python 3 wheel of the release: a wheel which does not contain any native code (ABI tag {@code none}
+     * and platform tag {@code any}) and is compatible with Python 3. Packages which are only distributed with native
+     * code (C extensions) are not supported since they would require a platform specific build.
+     *
+     * @return the pure Python 3 wheel of the release
+     * @since 1.1.5
      */
-    public Optional<PypiPackageUrlDto> getEggOrWhlUrlDtoForNewestVersion() throws PypiApiException
+    public Optional<PypiPackageUrlDto> getWhlFileUrlDto()
     {
-        String version = info.getVersion();
-        if (version == null) {
-            if (releases.size() < 1) {
-                return Optional.empty();
-            }
-            String firstChildLabel = releases.fieldNames().next();
-            return getEggOrWhlFileUrlDtoForVersion(firstChildLabel);
-        } else {
-            return getEggOrWhlFileUrlDtoForVersion(version);
-        }
-    }
-
-    public List<String> getAvailableReleaseVersions(){
-        return IteratorUtils.toList(releases.fieldNames());
-    }
-
-    /**
-     * @return -
-     * @param releaseVersion - releaseVersion of package to be used to get url meta data
-     */
-    public Optional<PypiPackageUrlDto> getZipUrlDtoForVersion(String releaseVersion)
-    {
-        return getFileUrlDtoForVersion(releaseVersion, Collections.singleton(PypiParameters.PACKAGE_TYPE_SDIST));
-    }
-
-    /**
-     * @return -
-     * @param releaseVersion - releaseVersion of package to be used to get url meta data
-     */
-    public Optional<PypiPackageUrlDto> getEggFileUrlDtoForVersion(String releaseVersion)
-    {
-        return getFileUrlDtoForVersion(releaseVersion, Collections.singleton(PypiParameters.PACKAGE_TYPE_EGG));
-    }
-
-    /**
-     * @return -
-     * @param releaseVersion - releaseVersion of package to be used to get url meta data
-     */
-    public Optional<PypiPackageUrlDto> getWhlFileUrlDtoForVersion(String releaseVersion)
-    {
-        return getFileUrlDtoForVersion(releaseVersion,
-                Sets.newHashSet(PypiParameters.PACKAGE_TYPE_WHEEL));
-    }
-
-    /**
-     * @return -
-     * @param releaseVersion - releaseVersion of package to be used to get url meta data
-     */
-    public Optional<PypiPackageUrlDto> getEggOrWhlFileUrlDtoForVersion(String releaseVersion)
-    {
-        return getFileUrlDtoForVersion(releaseVersion,
-                Sets.newHashSet(PypiParameters.PACKAGE_TYPE_EGG, PypiParameters.PACKAGE_TYPE_WHEEL));
-    }
-
-    private Optional<PypiPackageUrlDto> getFileUrlDtoForVersion(String releaseVersion, Set packageTypes)
-    {
-        JsonNode versionUrlNode = releases.get(releaseVersion);
-        if (versionUrlNode == null || versionUrlNode.isMissingNode()) {
+        if (urls == null) {
             return Optional.empty();
-        } else {
-            ObjectMapper objectMapper = new ObjectMapper();
-            try {
-                PypiPackageUrlDto[] pypiPackageUrlDtos =
-                        objectMapper.treeToValue(versionUrlNode, PypiPackageUrlDto[].class);
-                // 1 get whl i egg
-                List<PypiPackageUrlDto> packagesOfGivenTypes =
-                        getPackagesOfGivenTypes(pypiPackageUrlDtos, packageTypes);
-                return tryToGetCompatiblePackage(packagesOfGivenTypes);
-            } catch (JsonProcessingException e) {
-                //should never happen
-                return Optional.empty();
-            }
         }
+
+        return urls.stream().filter(url -> !url.isYanked())
+            .filter(url -> PypiParameters.PACKAGE_TYPE_WHEEL.equals(url.getPackagetype()))
+            .filter(url -> isPurePython3Wheel(url.getFilename())).findFirst();
     }
 
-    private List<PypiPackageUrlDto> getPackagesOfGivenTypes(PypiPackageUrlDto[] pypiPackageUrlDtos, Set packageTypes)
+    /**
+     * @param filename the name of the wheel file, in the form
+     *            {@code {distribution}-{version}(-{build})?-{python tag}-{abi tag}-{platform tag}.whl} (PEP 427)
+     * @return true if the wheel is compatible with Python 3 and does not contain any native code
+     */
+    private static boolean isPurePython3Wheel(String filename)
     {
-        return Arrays.stream(pypiPackageUrlDtos).filter(
-                pypiPackageUrlDto -> packageTypes.contains(pypiPackageUrlDto.getPackagetype())
-        ).collect(Collectors.toList());
-    }
-
-    private Optional<PypiPackageUrlDto> tryToGetCompatiblePackage(List<PypiPackageUrlDto> packagesOfGivenTypes)
-    {
-        Optional<PypiPackageUrlDto> result;
-        result = tryToGetPython27PackageRegardingPythonVersionField(packagesOfGivenTypes);
-        if (!result.isPresent()) {
-            result = tryToGetPython27PackageRegadingPythonURLFileName(packagesOfGivenTypes);
+        if (filename == null || !filename.endsWith(WHEEL_EXTENSION)) {
+            return false;
         }
-        if (!result.isPresent()) {
-            result = tryToGetPython2PackageRegadingPythonURLFileName(packagesOfGivenTypes);
+
+        String[] parts = StringUtils.removeEnd(filename, WHEEL_EXTENSION).split("-");
+        if (parts.length < 5) {
+            return false;
         }
-        return result;
-    }
 
-    private Optional<PypiPackageUrlDto> tryToGetPython27PackageRegardingPythonVersionField(
-            List<PypiPackageUrlDto> packagesOfGivenTypes)
-    {
-        return packagesOfGivenTypes.stream().filter(pypiPackageUrlDto -> {
-            String pythonVersion = pypiPackageUrlDto.getPython_version().toLowerCase();
-            return pythonVersion.contains("2.7") || pythonVersion.contains("any");
-        }).findFirst();
-    }
+        String pythonTag = parts[parts.length - 3];
+        String abiTag = parts[parts.length - 2];
+        String platformTag = parts[parts.length - 1];
 
-    private Optional<PypiPackageUrlDto> tryToGetPython27PackageRegadingPythonURLFileName(
-            List<PypiPackageUrlDto> packagesOfGivenTypes)
-    {
-        return packagesOfGivenTypes.stream()
-                .filter(pypiPackageUrlDto -> pypiPackageUrlDto.getUrl().toLowerCase().contains("py27")
-                ).findFirst();
-    }
-
-    private Optional<PypiPackageUrlDto> tryToGetPython2PackageRegadingPythonURLFileName(
-            List<PypiPackageUrlDto> packagesOfGivenTypes)
-    {
-        return packagesOfGivenTypes.stream()
-                .filter(pypiPackageUrlDto -> pypiPackageUrlDto.getUrl().toLowerCase().contains("py2")
-                ).findFirst();
+        // Each tag can be a compressed set of tags separated by dots (e.g. "py2.py3")
+        return "none".equals(abiTag) && "any".equals(platformTag)
+            && Arrays.stream(pythonTag.split("\\.")).anyMatch(tag -> tag.startsWith("py3"));
     }
 
     public PypiPackageInfoDto getInfo()
@@ -184,16 +99,6 @@ public class PypiPackageJSONDto
     public void setInfo(PypiPackageInfoDto info)
     {
         this.info = info;
-    }
-
-    public JsonNode getReleases()
-    {
-        return releases;
-    }
-
-    public void setReleases(JsonNode releases)
-    {
-        this.releases = releases;
     }
 
     public List<PypiPackageUrlDto> getUrls()

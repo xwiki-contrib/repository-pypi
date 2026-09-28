@@ -49,14 +49,11 @@ import javax.inject.Inject;
 import javax.inject.Singleton;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpException;
 import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StoredField;
-import org.apache.lucene.document.StringField;
-import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -68,6 +65,7 @@ import org.xwiki.component.phase.Disposable;
 import org.xwiki.component.phase.Initializable;
 import org.xwiki.component.phase.InitializationException;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
+import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiSimpleProjectDto;
 import org.xwiki.contrib.repository.pypi.internal.searching.LuceneParameters;
 import org.xwiki.contrib.repository.pypi.internal.searching.PypiPackageListIndexUpdateTask;
 import org.xwiki.contrib.repository.pypi.internal.searching.PypiPackageSearcher;
@@ -140,7 +138,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         initializePackageListIndexDirectory();
         timer = new Timer();
         PypiPackageListIndexUpdateTask pypiPackageListIndexUpdateTask = new PypiPackageListIndexUpdateTask(
-            pypiPackageListIndexDirectory, this, environment, httpClientFactory, logger);
+            pypiPackageListIndexDirectory, environment, httpClientFactory, logger);
 
         // TODO: make the period configurable
         long period = 1000L * 60L * 60L * 12L;
@@ -183,7 +181,7 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         // If no index can be found use the default embedded one
         if (pypiPackageListIndexDirectory.get() == null) {
             try {
-                importIndex(getClass().getResourceAsStream("/luceneIndexOfValidPackages/pypi-index-20191114.zip"));
+                importIndex(getClass().getResourceAsStream("/luceneIndexOfValidPackages/pypi-index-20260928.zip"));
             } catch (Exception e) {
                 throw new InitializationException("Could not copy lucene index to local directory", e);
             }
@@ -241,9 +239,10 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
         String pypiPackage = PypiUtils.getPackageName(packageName);
 
         try {
-            PypiPackageJSONDto pypiPackageData = getPypiPackageData(pypiPackage, Optional.empty());
-            List<Version> versions = pypiPackageData.getAvailableReleaseVersions().stream()
-                .map(releaseVersion -> new DefaultVersion(releaseVersion)).collect(Collectors.toList());
+            PypiSimpleProjectDto projectData = getPypiSimpleProjectData(pypiPackage);
+            List<Version> versions = projectData.getVersions() != null ? projectData.getVersions().stream()
+                .map(releaseVersion -> new DefaultVersion(releaseVersion)).collect(Collectors.toList())
+                : Collections.emptyList();
 
             if (versions.isEmpty()) {
                 throw new ExtensionNotFoundException(
@@ -278,26 +277,47 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
     public PypiPackageJSONDto getPypiPackageData(String packageName, Optional<String> version)
         throws HttpException, ExtensionNotFoundException
     {
-        URI uri = null;
+        String uri;
+        if (version.isPresent()) {
+            uri = PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName).replace("{version}",
+                version.get());
+        } else {
+            uri = PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName);
+        }
+
+        return get(uri, null, PypiPackageJSONDto.class, packageName);
+    }
+
+    /**
+     * @param packageName the name of the package
+     * @return the JSON form of the Simple API page of the package
+     * @throws HttpException when failing to get the package data
+     * @throws ExtensionNotFoundException when the package does not exist
+     * @since 1.1.5
+     */
+    public PypiSimpleProjectDto getPypiSimpleProjectData(String packageName)
+        throws HttpException, ExtensionNotFoundException
+    {
+        return get(PypiParameters.PACKAGE_SIMPLE_API.replace("{package_name}", packageName),
+            PypiParameters.SIMPLE_API_JSON_MEDIA_TYPE, PypiSimpleProjectDto.class, packageName);
+    }
+
+    private <T> T get(String uriString, String accept, Class<T> type, String packageName)
+        throws HttpException, ExtensionNotFoundException
+    {
+        URI uri;
         try {
-            if (version.isPresent()) {
-                uri = new URI(PypiParameters.PACKAGE_VERSION_INFO_JSON.replace("{package_name}", packageName)
-                    .replace("{version}", version.get()));
-            } else {
-                uri = new URI(PypiParameters.PACKAGE_INFO_JSON.replace("{package_name}", packageName));
-            }
+            uri = new URI(uriString);
         } catch (URISyntaxException e) {
-            new HttpException("Problem with created URI for resolving package info", e);
+            throw new HttpException(String.format("Invalid URI [%s] for resolving package info", uriString), e);
         }
 
-        InputStream inputStream = PyPiHttpUtils.performGet(uri, httpClientFactory, localContext);
+        try (InputStream inputStream = PyPiHttpUtils.performGet(uri, accept, httpClientFactory, localContext)) {
+            if (inputStream == null) {
+                throw new ExtensionNotFoundException("Cannot find package with id [" + packageName + "] on pypi");
+            }
 
-        if (inputStream == null) {
-            throw new ExtensionNotFoundException("Cannot find package with id [" + packageName + "] on pypi");
-        }
-
-        try {
-            return objectMapper.readValue(inputStream, PypiPackageJSONDto.class);
+            return objectMapper.readValue(inputStream, type);
         } catch (IOException e) {
             throw new HttpException(String.format("Failed to parse response body of request [%s]", uri), e);
         }
@@ -367,6 +387,8 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 outputFile = new File(outputFile, getIndexFileName());
             }
         } else if (outputFile.getName().endsWith(".zip")) {
+            outputFile.getParentFile().mkdirs();
+        } else {
             outputFile.mkdirs();
 
             outputFile = new File(outputFile, getIndexFileName());
@@ -378,16 +400,15 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 try (ZipOutputStream zip = new ZipOutputStream(new FileOutputStream(outputFile))) {
                     zip.putNextEntry(new ZipEntry("index.txt"));
 
-                    try (Writer writer = new OutputStreamWriter(zip, StandardCharsets.UTF_8)) {
-                        for (int i = 0; i < reader.maxDoc(); i++) {
-                            Document doc = reader.document(i);
+                    // Don't close the writer since it would close the zip stream before the entry is closed
+                    Writer writer = new OutputStreamWriter(zip, StandardCharsets.UTF_8);
+                    for (int i = 0; i < reader.maxDoc(); i++) {
+                        Document doc = reader.document(i);
 
-                            writer.append(doc.get(LuceneParameters.PACKAGE_NAME));
-                            writer.append('\t');
-                            writer.append(doc.get(LuceneParameters.VERSION));
-                            writer.append('\n');
-                        }
+                        writer.append(doc.get(LuceneParameters.PACKAGE_NAME));
+                        writer.append('\n');
                     }
+                    writer.flush();
 
                     zip.closeEntry();
                 }
@@ -410,17 +431,12 @@ public class PypiExtensionRepository extends AbstractExtensionRepository
                 try (BufferedReader reader =
                     new BufferedReader(new InputStreamReader(zip, StandardCharsets.UTF_8))) {
                     for (String line = reader.readLine(); line != null; line = reader.readLine()) {
-                        int index = line.indexOf('\t');
+                        // Older indexes also contain the version of the package after a tab
+                        String packageName = StringUtils.substringBefore(line, "\t");
 
-                        String packageName = line.substring(0, index);
-                        String packageVersion = line.substring(index + 1);
-
-                        Document document = new Document();
-                        document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
-                        document.add(new StringField(LuceneParameters.ID, packageName, Field.Store.YES));
-                        document.add(new StoredField(LuceneParameters.VERSION, packageVersion));
-
-                        indexWriter.addDocument(document);
+                        if (!packageName.isEmpty()) {
+                            indexWriter.addDocument(PypiPackageListIndexUpdateTask.createNewDocument(packageName));
+                        }
                     }
                 }
             }

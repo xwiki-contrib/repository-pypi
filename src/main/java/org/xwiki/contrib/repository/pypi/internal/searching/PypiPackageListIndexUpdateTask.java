@@ -22,14 +22,13 @@ package org.xwiki.contrib.repository.pypi.internal.searching;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.List;
-import java.util.Optional;
 import java.util.TimerTask;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
+import java.util.function.Consumer;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpException;
@@ -37,37 +36,34 @@ import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.store.FSDirectory;
-import org.jsoup.Jsoup;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
 import org.slf4j.Logger;
-import org.xwiki.contrib.repository.pypi.internal.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
-import org.xwiki.contrib.repository.pypi.internal.dto.packagesInJython.PackagesInJython;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.utils.PyPiHttpUtils;
-import org.xwiki.contrib.repository.pypi.internal.utils.PypiUtils;
 import org.xwiki.environment.Environment;
-import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.repository.http.internal.HttpClientFactory;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.core.JsonToken;
+
 /**
+ * Rebuild the index of the PyPI packages from the list of projects provided by the Simple API.
+ *
  * @version $Id: 81a55f3a16b33bcf2696d0cac493b25c946b6ee4 $
  * @since 1.0
  */
 public class PypiPackageListIndexUpdateTask extends TimerTask
 {
+    private static final JsonFactory JSON_FACTORY = new JsonFactory();
+
     private final HttpClientContext localContext;
 
     private AtomicReference<File> pypiPackageListIndexDirectory;
-
-    private PypiExtensionRepository pypiExtensionRepository;
 
     private Environment environment;
 
@@ -76,11 +72,9 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
     private Logger logger;
 
     public PypiPackageListIndexUpdateTask(AtomicReference<File> pypiPackageListIndexDirectory,
-        PypiExtensionRepository pypiExtensionRepository, Environment environment, HttpClientFactory httpClientFactory,
-        Logger logger)
+        Environment environment, HttpClientFactory httpClientFactory, Logger logger)
     {
         this.pypiPackageListIndexDirectory = pypiPackageListIndexDirectory;
-        this.pypiExtensionRepository = pypiExtensionRepository;
         this.environment = environment;
         this.httpClientFactory = httpClientFactory;
         this.localContext = HttpClientContext.create();
@@ -95,17 +89,15 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         File indexDir = new File(environment.getPermanentDirectory(), "cache/pypi-index");
         indexDir = new File(indexDir, UUID.randomUUID().toString());
 
-        try (IndexWriter indexWriter =
-            new IndexWriter(FSDirectory.open(indexDir.toPath()), new IndexWriterConfig(new StandardAnalyzer()))) {
-            try (InputStream htmlPageInputStream = getSimpleApiHtmlPageInputStream()) {
-                if (htmlPageInputStream != null) {
-                    List<String> packageNames = parseHtmlPageToPackagenames(htmlPageInputStream);
-                    packageNames = removePackagesIncludedInJython(packageNames);
-                    addAllValidPackagesToIndex(indexWriter, packageNames);
+        try (InputStream simpleIndexInputStream = getSimpleApiIndexInputStream()) {
+            if (simpleIndexInputStream != null) {
+                try (IndexWriter indexWriter = new IndexWriter(FSDirectory.open(indexDir.toPath()),
+                    new IndexWriterConfig(new StandardAnalyzer()))) {
+                    parsePackageNames(simpleIndexInputStream, packageName -> addPackage(indexWriter, packageName));
                 }
                 newIndexCreated = true;
             }
-        } catch (IOException e) {
+        } catch (IOException | UncheckedIOException e) {
             logger.error("IO problem whilst updating python package index", e);
         }
         if (newIndexCreated) {
@@ -116,7 +108,7 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
                     FileUtils.forceDelete(previousIndexDir);
                 }
             } catch (Exception e) {
-
+                logger.warn("Failed to delete previous index [{}]", previousIndexDir, e);
             }
             logger.info("End of update lucene index task. Pypi packages list index updated");
         } else {
@@ -124,61 +116,76 @@ public class PypiPackageListIndexUpdateTask extends TimerTask
         }
     }
 
-    private List<String> removePackagesIncludedInJython(List<String> packageNames)
+    private void addPackage(IndexWriter indexWriter, String packageName)
     {
-        packageNames.removeAll(PackagesInJython.getPackagesIncludedInJython().getPackages());
-        return packageNames;
+        try {
+            indexWriter.addDocument(createNewDocument(packageName));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
     }
 
-    private void addAllValidPackagesToIndex(IndexWriter indexWriter, List<String> packageNames)
-    {
-        packageNames.parallelStream().forEach(packageName -> {
-            try {
-                PypiPackageJSONDto packageDataFromApi =
-                    this.pypiExtensionRepository.getPypiPackageData(packageName, Optional.empty());
-
-                if (PypiUtils.isPackageValidForXwiki(packageDataFromApi)) {
-                    Document newDocument = createNewDocument(packageDataFromApi);
-                    indexWriter.addDocument(newDocument);
-                }
-            } catch (ExtensionNotFoundException | HttpException e) {
-                logger.debug("Could not resolve " + packageName + " package", e);
-            } catch (IOException e) {
-                logger.debug("IO problems whilst serializing " + packageName + " package extension", e);
-            }
-        });
-    }
-
-    private Document createNewDocument(String packageName, String version)
+    /**
+     * @param packageName the name of the package
+     * @return the Lucene document indexing the package
+     * @since 1.1.5
+     */
+    public static Document createNewDocument(String packageName)
     {
         Document document = new Document();
         document.add(new TextField(LuceneParameters.PACKAGE_NAME, packageName, Field.Store.YES));
         document.add(new StringField(LuceneParameters.ID, packageName, Field.Store.YES));
-        document.add(new StoredField(LuceneParameters.VERSION, version));
         return document;
     }
 
-    private Document createNewDocument(PypiPackageJSONDto pypiPackageJSONDto)
+    /**
+     * Extract the package names from the JSON form (PEP 691) of the Simple API index. The index lists all the projects
+     * of PyPI (several tens of MB) so it's streamed instead of being fully loaded in memory.
+     *
+     * @param is the JSON form of the Simple API index
+     * @param consumer called with the name of each package, in the order of the index
+     * @throws IOException when failing to parse the index
+     * @since 1.1.5
+     */
+    protected void parsePackageNames(InputStream is, Consumer<String> consumer) throws IOException
     {
-        String packageName = pypiPackageJSONDto.getInfo().getName();
-        String version = pypiPackageJSONDto.getInfo().getVersion();
-        return createNewDocument(packageName, version);
+        try (JsonParser parser = JSON_FACTORY.createParser(is)) {
+            if (parser.nextToken() != JsonToken.START_OBJECT) {
+                throw new IOException("The Simple API index is not a JSON object");
+            }
+
+            while (parser.nextToken() == JsonToken.FIELD_NAME) {
+                String fieldName = parser.getCurrentName();
+                parser.nextToken();
+                if ("projects".equals(fieldName) && parser.currentToken() == JsonToken.START_ARRAY) {
+                    while (parser.nextToken() == JsonToken.START_OBJECT) {
+                        parseProject(parser, consumer);
+                    }
+                } else {
+                    parser.skipChildren();
+                }
+            }
+        }
     }
 
-    protected List<String> parseHtmlPageToPackagenames(InputStream is) throws IOException
+    private void parseProject(JsonParser parser, Consumer<String> consumer) throws IOException
     {
-        org.jsoup.nodes.Document doc = Jsoup.parse(is, null, PypiParameters.PACKAGE_LIST_SIMPLE_API);
-
-        Elements links = doc.select("a");
-
-        return links.stream().map(Element::text).collect(Collectors.toList());
+        while (parser.nextToken() == JsonToken.FIELD_NAME) {
+            String fieldName = parser.getCurrentName();
+            parser.nextToken();
+            if ("name".equals(fieldName)) {
+                consumer.accept(parser.getText());
+            } else {
+                parser.skipChildren();
+            }
+        }
     }
 
-    public InputStream getSimpleApiHtmlPageInputStream()
+    public InputStream getSimpleApiIndexInputStream()
     {
         try {
-            return PyPiHttpUtils.performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API), httpClientFactory,
-                localContext);
+            return PyPiHttpUtils.performGet(new URI(PypiParameters.PACKAGE_LIST_SIMPLE_API),
+                PypiParameters.SIMPLE_API_JSON_MEDIA_TYPE, httpClientFactory, localContext);
         } catch (HttpException e) {
             logger.error("Failed to get list of python packages from PyPi", e);
         } catch (URISyntaxException e) {

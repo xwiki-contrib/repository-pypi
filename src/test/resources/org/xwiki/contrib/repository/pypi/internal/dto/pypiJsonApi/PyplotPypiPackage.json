@@ -1,37 +1,56 @@
 {
   "info": {
-    "maintainer": "",
-    "docs_url": null,
-    "requires_python": null,
-    "maintainer_email": "",
-    "cheesecake_code_kwalitee_id": null,
-    "keywords": "",
-    "package_url": "http://pypi.python.org/pypi/pyplot",
     "author": "Matplotlib Development Team",
     "author_email": "matplotlib-devel@python.org",
-    "download_url": "",
-    "platform": "any",
-    "version": "1.5.0",
-    "cheesecake_documentation_id": null,
-    "_pypi_hidden": false,
-    "description": "This is a placeholder package.  To obtain matplotlib, see the matplotlib package.",
-    "release_url": "http://pypi.python.org/pypi/pyplot/1.5.0",
-    "downloads": {
-      "last_month": 0,
-      "last_week": 0,
-      "last_day": 0
-    },
-    "_pypi_ordering": 0,
+    "bugtrack_url": null,
     "classifiers": [],
-    "name": "pyplot",
-    "bugtrack_url": "",
-    "license": "BSD",
-    "summary": "Python plotting package",
+    "description": "This is a placeholder package.  To obtain matplotlib, see the matplotlib package.",
+    "description_content_type": null,
+    "docs_url": null,
+    "download_url": "",
+    "downloads": {
+      "last_day": -1,
+      "last_month": -1,
+      "last_week": -1
+    },
+    "dynamic": null,
     "home_page": "http://matplotlib.org/",
-    "cheesecake_installability_id": null
+    "keywords": "",
+    "license": "BSD",
+    "license_expression": null,
+    "license_files": null,
+    "maintainer": "",
+    "maintainer_email": "",
+    "name": "pyplot",
+    "package_url": "https://pypi.org/project/pyplot/",
+    "platform": "any",
+    "project_url": "https://pypi.org/project/pyplot/",
+    "project_urls": {
+      "Homepage": "http://matplotlib.org/"
+    },
+    "provides_extra": null,
+    "release_url": "https://pypi.org/project/pyplot/1.5.0/",
+    "requires_dist": null,
+    "requires_python": null,
+    "summary": "Python plotting package",
+    "version": "1.5.0",
+    "yanked": false,
+    "yanked_reason": null
   },
-  "releases": {
-    "1.5.0": []
+  "last_serial": 1893550,
+  "ownership": {
+    "organization": null,
+    "roles": [
+      {
+        "role": "Owner",
+        "user": "Thomas.Caswell"
+      },
+      {
+        "role": "Owner",
+        "user": "mdboom2"
+      }
+    ]
   },
-  "urls": []
+  "urls": [],
+  "vulnerabilities": []
 }

@@ -39,6 +39,7 @@ public class PypiPackageUrlDto
     private String packagetype;
     private String path;
     private long size;
+    private boolean yanked;
 
     public boolean isHas_sig()
     {
@@ -148,5 +149,15 @@ public class PypiPackageUrlDto
     public void setSize(long size)
     {
         this.size = size;
+    }
+
+    public boolean isYanked()
+    {
+        return yanked;
+    }
+
+    public void setYanked(boolean yanked)
+    {
+        this.yanked = yanked;
     }
 }

@@ -1,14 +1,12 @@
 package org.xwiki.contrib.repository.pypi.internal.dto.wheelMetadata;
 
 import java.net.URISyntaxException;
-import java.util.Optional;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.xwiki.contrib.repository.pypi.internal.PypiExtensionRepository;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageInfoDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.ResolveException;
 
 import static org.junit.Assert.assertEquals;
@@ -32,8 +30,6 @@ public class RequiredDistributionsTest
         PypiPackageInfoDto functiontoolsPackageInfoDto = new PypiPackageInfoDto();
         functiontoolsPackageInfoDto.setVersion("2.18.1");
         when(functiontoolsPackageJSONDto.getInfo()).thenReturn(functiontoolsPackageInfoDto);
-        when(functiontoolsPackageJSONDto.getEggOrWhlFileUrlDtoForVersion(any()))
-                .thenReturn(Optional.of(new PypiPackageUrlDto()));
         when(pypiExtensionRepository.getPypiPackageData(anyString(), any()))
                 .thenReturn(functiontoolsPackageJSONDto);
     }

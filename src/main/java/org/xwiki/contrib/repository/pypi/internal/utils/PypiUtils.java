@@ -23,8 +23,6 @@ import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
 import org.xwiki.contrib.repository.pypi.internal.PypiParameters;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
-import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.extension.ExtensionId;
 import org.xwiki.extension.ExtensionNotFoundException;
 import org.xwiki.extension.ResolveException;
@@ -91,13 +89,6 @@ final public class PypiUtils
     public static boolean isSecondVersionNewer(String currentVersion, String newestVersion)
     {
         return (new DefaultVersion(currentVersion).compareTo(new DefaultVersion(newestVersion))) < 0;
-    }
-
-    public static boolean isPackageValidForXwiki(PypiPackageJSONDto packageData)
-    {
-        Optional<PypiPackageUrlDto> eggOrWhlFileUrlDtoForVersion =
-            packageData.getWhlFileUrlDtoForVersion(packageData.getInfo().getVersion());
-        return eggOrWhlFileUrlDtoForVersion.isPresent();
     }
 
 }

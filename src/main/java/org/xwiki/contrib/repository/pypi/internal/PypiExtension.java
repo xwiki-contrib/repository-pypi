@@ -24,12 +24,14 @@ import java.io.Serializable;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 import org.apache.commons.lang3.StringUtils;
+import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageInfoDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageJSONDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.pypiJsonApi.PypiPackageUrlDto;
 import org.xwiki.contrib.repository.pypi.internal.dto.wheelMetadata.RequiredDistributions;
@@ -71,21 +73,25 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         String packageName = pypiPackageData.getInfo().getName();
         String version = pypiPackageData.getInfo().getVersion();
         ExtensionId extensionId = new ExtensionId(PypiParameters.DEFAULT_GROUPID + ":" + packageName, version);
-        Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional = pypiPackageData.getWhlFileUrlDtoForVersion(version);
+        Optional<PypiPackageUrlDto> fileUrlDtoForVersionOptional = pypiPackageData.getWhlFileUrlDto();
         if (!fileUrlDtoForVersionOptional.isPresent()) {
             throw new ResolveException("Compatible distribution of  [" + packageName
-                + "] not found in PyPi repository (required compatibility with Jython 2.7)");
+                + "] not found in PyPi repository (a pure Python 3 wheel is required)");
         }
         PypiPackageUrlDto fileUrlDtoForVersion = fileUrlDtoForVersionOptional.get();
         PypiExtension pypiExtension =
             new PypiExtension(pypiExtensionRepository, extensionId, PypiParameters.PACKAGE_TYPE);
 
         // set metadata
-        pypiExtension.setName(pypiPackageData.getInfo().getName());
-        pypiExtension.setDescription(pypiPackageData.getInfo().getDescription());
-        pypiExtension.setSummary(StringUtils.substring(pypiPackageData.getInfo().getDescription(), 0, 200));
-        pypiExtension.addLicences(pypiPackageData.getInfo().getLicense(), licenseManager);
-        pypiExtension.setWebsite(pypiPackageData.getInfo().getHome_page());
+        PypiPackageInfoDto info = pypiPackageData.getInfo();
+        pypiExtension.setName(info.getName());
+        pypiExtension.setDescription(info.getDescription());
+        pypiExtension.setSummary(StringUtils.isNotEmpty(info.getSummary()) ? info.getSummary()
+            : StringUtils.substring(info.getDescription(), 0, 200));
+        // Recent packages declare their license as an SPDX expression (PEP 639) instead of the free form license
+        pypiExtension.addLicences(StringUtils.defaultIfEmpty(info.getLicense_expression(), info.getLicense()),
+            licenseManager);
+        pypiExtension.setWebsite(getWebsite(info));
         pypiExtension.addRepository(pypiExtensionRepository.getDescriptor());
         pypiExtension.setRecommended(false);
 
@@ -102,6 +108,24 @@ public class PypiExtension extends AbstractRemoteExtension implements Serializab
         pypiExtension.addDependencies(pypiExtensionRepository);
 
         return pypiExtension;
+    }
+
+    private static String getWebsite(PypiPackageInfoDto info)
+    {
+        // The home_page field is deprecated in favor of the project URLs (and is empty for most recent packages)
+        if (StringUtils.isNotEmpty(info.getHome_page())) {
+            return info.getHome_page();
+        }
+
+        if (info.getProject_urls() != null) {
+            for (Map.Entry<String, String> entry : info.getProject_urls().entrySet()) {
+                if (StringUtils.equalsAnyIgnoreCase(entry.getKey(), "homepage", "home page", "home")) {
+                    return entry.getValue();
+                }
+            }
+        }
+
+        return StringUtils.defaultIfEmpty(info.getProject_url(), info.getPackage_url());
     }
 
     private void addDependencies(PypiExtensionRepository pypiExtensionRepository) throws ResolveException
